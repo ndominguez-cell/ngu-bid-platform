@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protected routes: redirect to login if not authenticated
-  const isPublicRoute = path.startsWith('/login') || path.startsWith('/signup') || path === '/';
+  const isPublicRoute = path.startsWith('/login') || path.startsWith('/signup') || path === '/' || path.startsWith('/api/');
   if (!isPublicRoute && !user) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
