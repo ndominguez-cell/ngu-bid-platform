@@ -1,0 +1,1 @@
+# ngu-bid-platform
