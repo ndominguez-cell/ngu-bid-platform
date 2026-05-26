@@ -16,7 +16,8 @@ function NewEstimateContent() {
   const [bidIdInput, setBidIdInput] = useState(bidId ?? '');
   const [estimateName, setEstimateName] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -42,12 +43,12 @@ function NewEstimateContent() {
 
     try {
       const res = await fetch('/api/estimates', { method: 'POST', body: form });
-      const data = await res.json() as Record<string, unknown>;
-      if (!res.ok) throw new Error((data.error as string) || 'Upload failed');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
       setResult(data);
       setStep('review');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+    } catch (err: any) {
+      setError(err.message || 'Upload failed');
       setStep('upload');
     }
   }
@@ -65,8 +66,8 @@ function NewEstimateContent() {
   }
 
   if (step === 'review' && result) {
-    const lineItems = (result.line_items as Array<Record<string, unknown>>) ?? [];
-    const totalAmount = (result.total_amount as number) ?? 0;
+    const lineItems = result.line_items ?? [];
+    const totalAmount = result.total_amount ?? 0;
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
@@ -80,7 +81,7 @@ function NewEstimateContent() {
         {result.ai_summary && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 text-sm text-blue-800">
             <p className="font-bold mb-1">AI Takeoff Summary</p>
-            <p className="whitespace-pre-wrap">{result.ai_summary as string}</p>
+            <p className="whitespace-pre-wrap">{result.ai_summary}</p>
           </div>
         )}
 
@@ -101,14 +102,14 @@ function NewEstimateContent() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {lineItems.map((item, i) => (
+              {lineItems.map((item: any, i: number) => (
                 <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 text-xs font-medium text-purple-700 bg-purple-50/50">{item.trade as string}</td>
-                  <td className="px-4 py-2.5 text-gray-700">{item.description as string}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{(item.qty as number)?.toLocaleString()}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{item.unit as string}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">${(item.unit_price as number)?.toLocaleString()}</td>
-                  <td className="px-4 py-2.5 text-right font-bold text-[#1a3a5c]">${(item.total as number)?.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-xs font-medium text-purple-700 bg-purple-50/50">{item.trade}</td>
+                  <td className="px-4 py-2.5 text-gray-700">{item.description}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-600">{item.qty?.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-gray-500">{item.unit}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-600">${item.unit_price?.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right font-bold text-[#1a3a5c]">${item.total?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -116,7 +117,7 @@ function NewEstimateContent() {
         </div>
 
         <div className="flex gap-3">
-          <button onClick={() => router.push(`/estimates/${result.id as string}`)}
+          <button onClick={() => router.push(`/estimates/${result.id}`)}
             className="bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-6 py-2.5 rounded-lg text-sm transition-colors">
             View & Edit Full Estimate →
           </button>
