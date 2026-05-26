@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { Suspense, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
 
 type Step = 'upload' | 'processing' | 'review';
 
-export default function NewEstimatePage() {
+function NewEstimateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const bidId = searchParams.get('bid');
@@ -16,7 +16,7 @@ export default function NewEstimatePage() {
   const [bidIdInput, setBidIdInput] = useState(bidId ?? '');
   const [estimateName, setEstimateName] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -42,12 +42,12 @@ export default function NewEstimatePage() {
 
     try {
       const res = await fetch('/api/estimates', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const data = await res.json() as Record<string, unknown>;
+      if (!res.ok) throw new Error((data.error as string) || 'Upload failed');
       setResult(data);
       setStep('review');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
       setStep('upload');
     }
   }
@@ -65,6 +65,8 @@ export default function NewEstimatePage() {
   }
 
   if (step === 'review' && result) {
+    const lineItems = (result.line_items as Array<Record<string, unknown>>) ?? [];
+    const totalAmount = (result.total_amount as number) ?? 0;
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
@@ -78,14 +80,14 @@ export default function NewEstimatePage() {
         {result.ai_summary && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 text-sm text-blue-800">
             <p className="font-bold mb-1">AI Takeoff Summary</p>
-            <p className="whitespace-pre-wrap">{result.ai_summary}</p>
+            <p className="whitespace-pre-wrap">{result.ai_summary as string}</p>
           </div>
         )}
 
         <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Line Items</h2>
-            <span className="text-sm font-bold text-[#1a3a5c]">Total: {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(result.total_amount ?? 0)}</span>
+            <span className="text-sm font-bold text-[#1a3a5c]">Total: {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(totalAmount)}</span>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -99,14 +101,14 @@ export default function NewEstimatePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {(result.line_items ?? []).map((item: any, i: number) => (
+              {lineItems.map((item, i) => (
                 <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 text-xs font-medium text-purple-700 bg-purple-50/50">{item.trade}</td>
-                  <td className="px-4 py-2.5 text-gray-700">{item.description}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{item.qty?.toLocaleString()}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{item.unit}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">${item.unit_price?.toLocaleString()}</td>
-                  <td className="px-4 py-2.5 text-right font-bold text-[#1a3a5c]">${item.total?.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-xs font-medium text-purple-700 bg-purple-50/50">{item.trade as string}</td>
+                  <td className="px-4 py-2.5 text-gray-700">{item.description as string}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-600">{(item.qty as number)?.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-gray-500">{item.unit as string}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-600">${(item.unit_price as number)?.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right font-bold text-[#1a3a5c]">${(item.total as number)?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -114,7 +116,7 @@ export default function NewEstimatePage() {
         </div>
 
         <div className="flex gap-3">
-          <button onClick={() => router.push(`/estimates/${result.id}`)}
+          <button onClick={() => router.push(`/estimates/${result.id as string}`)}
             className="bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-6 py-2.5 rounded-lg text-sm transition-colors">
             View & Edit Full Estimate →
           </button>
@@ -188,5 +190,17 @@ export default function NewEstimatePage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function NewEstimatePage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 max-w-2xl mx-auto flex items-center justify-center min-h-[40vh]">
+        <Loader2 size={32} className="text-[#1a3a5c] animate-spin" />
+      </div>
+    }>
+      <NewEstimateContent />
+    </Suspense>
   );
 }
