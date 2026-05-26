@@ -121,9 +121,15 @@ create table if not exists estimates (
   updated_at      timestamptz default now()
 );
 
--- Add FK back to documents
-alter table documents add constraint fk_estimate
-  foreign key (estimate_id) references estimates(id) on delete set null;
+-- Add FK back to documents (safe re-run)
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_estimate' and conrelid = 'documents'::regclass
+  ) then
+    alter table documents add constraint fk_estimate
+      foreign key (estimate_id) references estimates(id) on delete set null;
+  end if;
+end $$;
 
 -- ============================================================
 -- PROPOSALS
@@ -197,14 +203,19 @@ begin
 end;
 $$;
 
+drop trigger if exists bids_updated_at on bids;
 create trigger bids_updated_at before update on bids
   for each row execute procedure update_updated_at();
+drop trigger if exists estimates_updated_at on estimates;
 create trigger estimates_updated_at before update on estimates
   for each row execute procedure update_updated_at();
+drop trigger if exists proposals_updated_at on proposals;
 create trigger proposals_updated_at before update on proposals
   for each row execute procedure update_updated_at();
+drop trigger if exists companies_updated_at on companies;
 create trigger companies_updated_at before update on companies
   for each row execute procedure update_updated_at();
+drop trigger if exists contacts_updated_at on contacts;
 create trigger contacts_updated_at before update on contacts
   for each row execute procedure update_updated_at();
 
@@ -222,16 +233,38 @@ alter table conversations enable row level security;
 alter table profiles enable row level security;
 
 -- Policy: any authenticated user can do everything (adjust per role later)
-create policy "Authenticated full access" on bids for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on bid_activity for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on companies for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on contacts for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on documents for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on estimates for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on proposals for all to authenticated using (true) with check (true);
-create policy "Authenticated full access" on conversations for all to authenticated using (true) with check (true);
-create policy "Users can view all profiles" on profiles for select to authenticated using (true);
-create policy "Users can update own profile" on profiles for update to authenticated using (auth.uid() = id);
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='bids' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on bids for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='bid_activity' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on bid_activity for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='companies' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on companies for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='contacts' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on contacts for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='documents' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on documents for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='estimates' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on estimates for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='proposals' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on proposals for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='conversations' and policyname='Authenticated full access') then
+    create policy "Authenticated full access" on conversations for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='profiles' and policyname='Users can view all profiles') then
+    create policy "Users can view all profiles" on profiles for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='profiles' and policyname='Users can update own profile') then
+    create policy "Users can update own profile" on profiles for update to authenticated using (auth.uid() = id);
+  end if;
+end $$;
 
 -- ============================================================
 -- SUPABASE STORAGE BUCKET
