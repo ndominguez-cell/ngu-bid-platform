@@ -7,6 +7,7 @@ import {
   LayoutDashboard, FileText, Calculator, Users, Send, Settings, LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 const NAV = [
   { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
@@ -64,18 +65,21 @@ export default function Sidebar({ userEmail }: { userEmail?: string }) {
 
       {/* Bottom */}
       <div className="px-2 py-3 border-t border-white/10">
-        <Link
-          href="/settings"
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            pathname.startsWith('/settings')
-              ? 'bg-white/20 text-white'
-              : 'text-white/50 hover:text-white hover:bg-white/10'
-          )}
-        >
-          <Settings size={17} />
-          Settings
-        </Link>
+        <div className="flex items-center gap-2 px-3 py-1">
+          <Link
+            href="/settings"
+            className={cn(
+              'flex flex-1 items-center gap-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+              pathname.startsWith('/settings')
+                ? 'text-white'
+                : 'text-white/50 hover:text-white'
+            )}
+          >
+            <Settings size={17} />
+            Settings
+          </Link>
+          <NotificationBell />
+        </div>
 
         {userEmail && (
           <div className="px-3 pt-2 pb-1">

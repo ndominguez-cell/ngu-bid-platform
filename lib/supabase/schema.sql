@@ -267,6 +267,15 @@ do $$ begin
 end $$;
 
 -- ============================================================
+-- PHASE 2 MIGRATION — Gmail OAuth token storage
+-- Run in Supabase > SQL Editor after Phase 1 schema is applied
+-- ============================================================
+alter table profiles add column if not exists google_refresh_token text;
+alter table profiles add column if not exists google_access_token text;
+alter table profiles add column if not exists google_token_expiry timestamptz;
+alter table profiles add column if not exists gmail_synced_at timestamptz;
+
+-- ============================================================
 -- SUPABASE STORAGE BUCKET
 -- Run separately in Supabase > Storage > New Bucket
 -- Name: "documents", Public: false

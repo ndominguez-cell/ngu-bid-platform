@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft, Mail, Copy } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import ProposalSendButton from './ProposalSendButton';
 
 export const revalidate = 0;
 
@@ -49,12 +50,11 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
         </div>
 
         <div className="flex gap-2 shrink-0">
-          {p.bids?.gc_email && (
-            <a href={`mailto:${p.bids.gc_email}?subject=${encodeURIComponent(p.subject)}&body=${encodeURIComponent(p.body_final ?? p.body_draft ?? '')}`}
-              className="flex items-center gap-1.5 text-xs bg-[#1a3a5c] text-white px-3 py-2 rounded-lg hover:bg-[#e87722] transition-colors font-semibold">
-              <Mail size={13} /> Open in Mail
-            </a>
-          )}
+          <ProposalSendButton
+            proposalId={p.id}
+            gcEmail={p.bids?.gc_email ?? null}
+            status={p.status}
+          />
         </div>
       </div>
 
@@ -108,12 +108,11 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
 
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-2">
             <h2 className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider mb-3">Actions</h2>
-            {p.bids?.gc_email && (
-              <a href={`mailto:${p.bids.gc_email}?subject=${encodeURIComponent(p.subject)}&body=${encodeURIComponent(p.body_final ?? p.body_draft ?? '')}`}
-                className="flex items-center justify-center gap-2 w-full bg-[#1a3a5c] hover:bg-[#e87722] text-white text-xs font-bold py-2.5 rounded-lg transition-colors">
-                <Mail size={13} /> Send via Gmail
-              </a>
-            )}
+            <ProposalSendButton
+              proposalId={p.id}
+              gcEmail={p.bids?.gc_email ?? null}
+              status={p.status}
+            />
             <Link href={`/bids/${p.bid_id}`}
               className="flex items-center justify-center gap-2 w-full border border-gray-200 text-gray-600 text-xs font-semibold py-2.5 rounded-lg hover:border-[#1a3a5c] transition-colors">
               View Bid

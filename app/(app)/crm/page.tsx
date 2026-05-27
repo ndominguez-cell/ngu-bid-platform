@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { Users, Building2, Phone, Mail } from 'lucide-react';
+import GmailSyncButton from './GmailSyncButton';
 
 export const revalidate = 0;
 
@@ -24,7 +25,8 @@ export default async function CRMPage() {
           <h1 className="text-2xl font-bold text-[#1a3a5c]">CRM</h1>
           <p className="text-gray-500 text-sm mt-0.5">Contacts and companies from bids and emails</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <GmailSyncButton />
           <Link href="/crm/companies/new" className="border border-[#1a3a5c] text-[#1a3a5c] text-sm font-bold px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5">
             <Building2 size={14} /> Add Company
           </Link>

@@ -1,23 +1,23 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { formatDate, formatCurrency, getDaysLeft, getUrgencyClass, getUrgencyLabel, STATUS_COLORS } from '@/lib/utils';
-import type { Bid } from '@/lib/types';
+import type { Bid, Conversation } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Mail, MapPin, Calendar, DollarSign, FileText } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Mail, MapPin, Calendar, DollarSign, MessageSquare } from 'lucide-react';
 import BidStatusUpdater from './BidStatusUpdater';
 
 export const revalidate = 0;
 
 export default async function BidDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from('bids')
-    .select('*, estimates(*), proposals(*)')
-    .eq('id', params.id)
-    .single();
+  const [{ data, error }, { data: conversations }] = await Promise.all([
+    supabase.from('bids').select('*, estimates(*), proposals(*)').eq('id', params.id).single(),
+    supabase.from('conversations').select('*').eq('bid_id', params.id).order('date', { ascending: false }),
+  ]);
 
   if (error || !data) notFound();
   const bid = data as Bid;
+  const convs = (conversations ?? []) as Conversation[];
   const days = getDaysLeft(bid.bid_due_date);
   const { bg, text } = STATUS_COLORS[bid.status] ?? STATUS_COLORS.New;
 
@@ -100,6 +100,29 @@ export default async function BidDetailPage({ params }: { params: { id: string }
               </div>
             )}
           </div>
+
+          {/* Email History */}
+          {convs.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h2 className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                <MessageSquare size={13} /> Email History
+              </h2>
+              <div className="space-y-2">
+                {convs.map(c => (
+                  <div key={c.id} className="flex items-start gap-3 p-3 border border-gray-100 rounded-lg">
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 mt-0.5 ${c.direction === 'outbound' ? 'bg-[#e87722]/10 text-[#e87722]' : 'bg-blue-50 text-blue-600'}`}>
+                      {c.direction === 'outbound' ? 'Sent' : 'Received'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-gray-700 truncate">{c.subject || '(no subject)'}</div>
+                      {c.snippet && <div className="text-[11px] text-gray-400 truncate mt-0.5">{c.snippet}</div>}
+                    </div>
+                    <div className="text-[10px] text-gray-400 shrink-0">{c.date ? formatDate(c.date) : ''}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Estimates */}
           <div className="bg-white rounded-xl shadow-sm p-5">

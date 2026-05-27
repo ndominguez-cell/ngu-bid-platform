@@ -167,6 +167,10 @@ export interface Profile {
   title: string | null;
   avatar_url: string | null;
   role: UserRole;
+  google_refresh_token: string | null;
+  google_access_token: string | null;
+  google_token_expiry: string | null;
+  gmail_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }

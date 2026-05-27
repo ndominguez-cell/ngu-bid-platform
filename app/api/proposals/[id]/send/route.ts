@@ -1,0 +1,69 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { getValidAccessToken, gmailFetch, buildMimeMessage } from '@/lib/gmail';
+
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const serviceClient = createServiceClient();
+
+  const { data: proposal, error: propErr } = await serviceClient
+    .from('proposals')
+    .select('*, bids(gc_email, gc_name, project_name)')
+    .eq('id', params.id)
+    .single();
+
+  if (propErr || !proposal) return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
+  if (proposal.status === 'Sent') return NextResponse.json({ error: 'Already sent' }, { status: 400 });
+
+  const bid = proposal.bids as { gc_email: string | null; gc_name: string | null; project_name: string } | null;
+  const toEmail = bid?.gc_email;
+  if (!toEmail) return NextResponse.json({ error: 'No recipient email on bid' }, { status: 400 });
+
+  try {
+    const accessToken = await getValidAccessToken(user.id);
+
+    const raw = buildMimeMessage({
+      to: toEmail,
+      subject: proposal.subject,
+      body: proposal.body_final || proposal.body_draft || '',
+    });
+
+    const sendRes = await gmailFetch(accessToken, '/messages/send', {
+      method: 'POST',
+      body: JSON.stringify({ raw }),
+    });
+
+    if (!sendRes.ok) {
+      const errText = await sendRes.text();
+      throw new Error(`Gmail send failed: ${errText}`);
+    }
+
+    const sent = await sendRes.json();
+    const threadId: string = sent.threadId ?? sent.id;
+    const now = new Date().toISOString();
+
+    await serviceClient.from('proposals').update({
+      status: 'Sent',
+      sent_at: now,
+      sent_by: user.id,
+      gmail_thread_id: threadId,
+    }).eq('id', params.id);
+
+    await serviceClient.from('conversations').insert({
+      bid_id: proposal.bid_id,
+      gmail_thread_id: threadId,
+      subject: proposal.subject,
+      snippet: (proposal.body_final || proposal.body_draft || '').substring(0, 200),
+      direction: 'outbound',
+      date: now,
+    });
+
+    return NextResponse.json({ success: true, thread_id: threadId });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Send failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
