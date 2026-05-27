@@ -6,33 +6,18 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
-  const formData = await req.formData();
-  const files = formData.getAll('files') as File[];
-  const bidId = formData.get('bid_id') as string;
-  const name = (formData.get('name') as string) || 'Estimate';
 
-  if (!files.length) return NextResponse.json({ error: 'No files uploaded' }, { status: 400 });
+  // Accept JSON body with storage paths (files already uploaded to Supabase Storage)
+  const { storage_paths, file_names, bid_id, name } = await req.json();
+
+  if (!storage_paths?.length) {
+    return NextResponse.json({ error: 'No files provided' }, { status: 400 });
+  }
 
   try {
-    // Convert files to base64 for Claude vision
-    const fileContents = await Promise.all(files.map(async (file) => {
-      const buffer = await file.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString('base64');
-      return { name: file.name, base64, mimeType: file.type, size: file.size };
-    }));
-
-    // Upload files to Supabase Storage
-    const uploadedPaths: string[] = [];
-    for (const fc of fileContents) {
-      const path = `bids/${bidId || 'general'}/${Date.now()}-${fc.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(path, Buffer.from(fc.base64, 'base64'), { contentType: fc.mimeType });
-      if (!uploadError) uploadedPaths.push(path);
-    }
-
-    // Build Claude prompt with file content
-    const fileDescriptions = fileContents.map(f => `File: ${f.name} (${f.mimeType}, ${(f.size/1024).toFixed(0)}KB)`).join('\n');
+    const fileDescriptions = (file_names as string[])
+      .map((n: string, i: number) => `File ${i + 1}: ${n}`)
+      .join('\n');
 
     const claudeMessages: Anthropic.MessageParam[] = [{
       role: 'user',
@@ -54,7 +39,7 @@ Return ONLY a valid JSON object with this exact structure:
   "line_items": [
     {
       "trade": "Concrete",
-      "description": "4\" Concrete Flatwork - Parking Area",
+      "description": "4\\" Concrete Flatwork - Parking Area",
       "qty": 5000,
       "unit": "SF",
       "unit_price": 8.50,
@@ -66,15 +51,9 @@ Return ONLY a valid JSON object with this exact structure:
   "notes": "Any important assumptions or clarifications"
 }
 
-Use current Texas market rates (2025-2026). Be conservative but realistic. Only include trades NGU performs. Calculate total_amount as sum of all line item totals times (1 + markup_pct/100).`
+Use current Texas market rates (2025-2026). Be conservative but realistic. Only include trades NGU performs. Calculate total_amount as sum of all line item totals times (1 + markup_pct/100). Base quantities on the project type and scope inferred from the filenames.`,
         },
-        // If PDF files were provided, note we're working from file names/descriptions
-        // In production, you'd send actual file content via base64 image blocks
-        {
-          type: 'text',
-          text: `Note: For this estimate, base your quantities on typical projects of this type and scope described in the filenames. If you can identify the project type from the filename, provide realistic estimates for NGU's scope of work.`
-        }
-      ]
+      ],
     }];
 
     const response = await anthropic.messages.create({
@@ -84,7 +63,14 @@ Use current Texas market rates (2025-2026). Be conservative but realistic. Only 
     });
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
-    let estimateData: any = {};
+    let estimateData: {
+      ai_summary?: string;
+      line_items?: Array<{ trade: string; description: string; qty: number; unit: string; unit_price: number; total: number }>;
+      total_amount?: number;
+      markup_pct?: number;
+      notes?: string;
+    } = {};
+
     try {
       const match = rawText.match(/\{[\s\S]*\}/);
       estimateData = JSON.parse(match ? match[0] : rawText);
@@ -98,43 +84,42 @@ Use current Texas market rates (2025-2026). Be conservative but realistic. Only 
       };
     }
 
-    // Calculate total
-    const subtotal = (estimateData.line_items || []).reduce((sum: number, item: any) => sum + (item.total || 0), 0);
-    const totalAmount = subtotal * (1 + (estimateData.markup_pct || 10) / 100);
+    const subtotal = (estimateData.line_items ?? []).reduce((sum, item) => sum + (item.total || 0), 0);
+    const totalAmount = subtotal * (1 + (estimateData.markup_pct ?? 10) / 100);
 
-    // Save estimate to database
     const { data: estimate, error: estError } = await supabase
       .from('estimates')
       .insert({
-        bid_id: bidId || null,
-        name,
+        bid_id: bid_id || null,
+        name: name || `Estimate – ${new Date().toLocaleDateString()}`,
         status: 'Draft',
         total_amount: Math.round(totalAmount),
-        markup_pct: estimateData.markup_pct || 10,
+        markup_pct: estimateData.markup_pct ?? 10,
         notes: estimateData.notes || null,
         ai_summary: estimateData.ai_summary || null,
-        line_items: estimateData.line_items || [],
+        line_items: estimateData.line_items ?? [],
       })
       .select()
       .single();
 
     if (estError) return NextResponse.json({ error: estError.message }, { status: 500 });
 
-    // Save document records
-    for (const path of uploadedPaths) {
+    // Save document records pointing to already-uploaded storage paths
+    for (let i = 0; i < (storage_paths as string[]).length; i++) {
       await supabase.from('documents').insert({
-        bid_id: bidId || null,
+        bid_id: bid_id || null,
         estimate_id: estimate.id,
-        name: path.split('/').pop(),
+        name: (file_names as string[])[i] ?? storage_paths[i].split('/').pop(),
         type: 'plans',
-        storage_path: path,
+        storage_path: storage_paths[i],
         mime_type: 'application/pdf',
       });
     }
 
     return NextResponse.json({ ...estimate }, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Estimate error:', err);
-    return NextResponse.json({ error: err.message || 'Estimate generation failed' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Estimate generation failed';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

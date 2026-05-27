@@ -2,9 +2,9 @@
 
 import { Suspense, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
-type Step = 'upload' | 'processing' | 'review';
+type Step = 'upload' | 'uploading' | 'processing' | 'review';
 
 function NewEstimateContent() {
   const router = useRouter();
@@ -16,6 +16,7 @@ function NewEstimateContent() {
   const [bidIdInput, setBidIdInput] = useState(bidId ?? '');
   const [estimateName, setEstimateName] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
@@ -33,24 +34,91 @@ function NewEstimateContent() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (files.length === 0) { setError('Please upload at least one file.'); return; }
-    setStep('processing');
     setError('');
 
-    const form = new FormData();
-    files.forEach(f => form.append('files', f));
-    form.append('bid_id', bidIdInput);
-    form.append('name', estimateName || `Estimate – ${new Date().toLocaleDateString()}`);
+    // Step 1: Upload files directly to Supabase Storage via signed URLs
+    setStep('uploading');
+    const storagePaths: string[] = [];
+    const fileNames: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setUploadProgress(`Uploading file ${i + 1} of ${files.length}: ${file.name}`);
+
+      try {
+        // Get signed upload URL
+        const presignRes = await fetch('/api/estimates/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, mimeType: file.type, bidId: bidIdInput }),
+        });
+        if (!presignRes.ok) {
+          const err = await presignRes.json();
+          throw new Error(err.error || 'Failed to get upload URL');
+        }
+        const { signedUrl, path } = await presignRes.json();
+
+        // Upload directly to Supabase Storage (bypasses Vercel size limits)
+        const uploadRes = await fetch(signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        });
+        if (!uploadRes.ok) throw new Error(`Upload failed for ${file.name}`);
+
+        storagePaths.push(path);
+        fileNames.push(file.name);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        setError(message);
+        setStep('upload');
+        return;
+      }
+    }
+
+    // Step 2: Call estimates API with storage paths (small JSON payload — no file size limit)
+    setStep('processing');
+    setUploadProgress('');
 
     try {
-      const res = await fetch('/api/estimates', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const res = await fetch('/api/estimates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storage_paths: storagePaths,
+          file_names: fileNames,
+          bid_id: bidIdInput,
+          name: estimateName || `Estimate – ${new Date().toLocaleDateString()}`,
+        }),
+      });
+
+      let data;
+      const contentType = res.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || 'Server error');
+      }
+
+      if (!res.ok) throw new Error(data.error || 'Estimate generation failed');
       setResult(data);
       setStep('review');
-    } catch (err: any) {
-      setError(err.message || 'Upload failed');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Estimate generation failed';
+      setError(message);
       setStep('upload');
     }
+  }
+
+  if (step === 'uploading') {
+    return (
+      <div className="p-6 max-w-2xl mx-auto flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 size={48} className="text-[#1a3a5c] animate-spin mb-6" />
+        <h2 className="text-xl font-bold text-[#1a3a5c] mb-2">Uploading Files…</h2>
+        <p className="text-gray-500 text-sm text-center max-w-md">{uploadProgress}</p>
+      </div>
+    );
   }
 
   if (step === 'processing') {
@@ -88,7 +156,9 @@ function NewEstimateContent() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Line Items</h2>
-            <span className="text-sm font-bold text-[#1a3a5c]">Total: {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(totalAmount)}</span>
+            <span className="text-sm font-bold text-[#1a3a5c]">
+              Total: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(totalAmount)}
+            </span>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -102,7 +172,7 @@ function NewEstimateContent() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {lineItems.map((item: any, i: number) => (
+              {lineItems.map((item: { trade: string; description: string; qty: number; unit: string; unit_price: number; total: number }, i: number) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="px-4 py-2.5 text-xs font-medium text-purple-700 bg-purple-50/50">{item.trade}</td>
                   <td className="px-4 py-2.5 text-gray-700">{item.description}</td>
@@ -119,7 +189,7 @@ function NewEstimateContent() {
         <div className="flex gap-3">
           <button onClick={() => router.push(`/estimates/${result.id}`)}
             className="bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-6 py-2.5 rounded-lg text-sm transition-colors">
-            View & Edit Full Estimate →
+            View &amp; Edit Full Estimate →
           </button>
           <button onClick={() => router.push('/estimates')}
             className="border border-gray-200 text-gray-600 font-semibold px-6 py-2.5 rounded-lg text-sm hover:border-[#1a3a5c] transition-colors">
@@ -148,7 +218,7 @@ function NewEstimateContent() {
         >
           <Upload size={32} className="mx-auto text-gray-300 mb-3" />
           <p className="font-semibold text-gray-600">Drop plans, specs, or documents here</p>
-          <p className="text-xs text-gray-400 mt-1">PDF or images · Multiple files OK</p>
+          <p className="text-xs text-gray-400 mt-1">PDF or images · Multiple files OK · Any size</p>
           <input ref={fileRef} type="file" multiple accept=".pdf,image/*" className="hidden"
             onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])} />
         </div>
@@ -183,11 +253,16 @@ function NewEstimateContent() {
           </div>
         </div>
 
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2 flex items-start gap-2">
+            <AlertCircle size={15} className="shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
 
         <button type="submit"
           className="w-full bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold py-3 rounded-xl transition-colors text-sm">
-          Upload & Generate Estimate with AI
+          Upload &amp; Generate Estimate with AI
         </button>
       </form>
     </div>
