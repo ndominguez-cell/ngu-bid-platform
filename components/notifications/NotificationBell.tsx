@@ -21,88 +21,73 @@ export default function NotificationBell() {
 
   useEffect(() => {
     const supabase = createClient();
-
     const channel = supabase
       .channel('bid-inserts')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'bids' },
-        (payload) => {
-          const bid = payload.new as BidNotification;
-          setNotifications(prev => [bid, ...prev].slice(0, 10));
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bids' }, (payload) => {
+        setNotifications(prev => [payload.new as BidNotification, ...prev].slice(0, 10));
+      })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  function handleOpen() {
-    setOpen(o => !o);
-  }
-
-  function handleBidClick(id: string) {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    setOpen(false);
-    router.push(`/bids/${id}`);
-  }
-
-  function handleClearAll() {
-    setNotifications([]);
-    setOpen(false);
-  }
-
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={handleOpen}
-        className="relative flex items-center justify-center w-8 h-8 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all"
+        onClick={() => setOpen(o => !o)}
+        className="icon-btn relative"
         title="Notifications"
+        aria-label="Notifications"
       >
         <Bell size={16} />
         {notifications.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] bg-[#e87722] rounded-full text-[9px] font-black text-white flex items-center justify-center px-0.5">
+          <span
+            className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full text-[9px] font-bold text-white grid place-items-center px-0.5"
+            style={{ background: 'var(--bad)' }}
+          >
             {notifications.length > 9 ? '9+' : notifications.length}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute left-full top-0 ml-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">New Bids</span>
+        <div
+          className="absolute right-0 top-full mt-1.5 w-72 rounded-md border shadow-lg z-50 overflow-hidden"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: 'var(--border)' }}>
+            <span className="label-mono">New Bids</span>
             {notifications.length > 0 && (
-              <button onClick={handleClearAll} className="text-[10px] text-gray-400 hover:text-red-400 font-semibold">
+              <button
+                onClick={() => setNotifications([])}
+                className="text-[11px] transition-colors"
+                style={{ color: 'var(--text-subtle)' }}
+              >
                 Clear all
               </button>
             )}
           </div>
-
           {notifications.length === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-gray-400">
+            <div className="px-4 py-6 text-center text-[12px]" style={{ color: 'var(--text-subtle)' }}>
               No new bids — you&apos;re up to date
             </div>
           ) : (
-            <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+            <div className="max-h-64 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
               {notifications.map(n => (
                 <button
                   key={n.id}
-                  onClick={() => handleBidClick(n.id)}
-                  className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
+                  onClick={() => { setNotifications(p => p.filter(x => x.id !== n.id)); setOpen(false); router.push(`/bids/${n.id}`); }}
+                  className="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--surface-2)]"
                 >
-                  <div className="text-xs font-semibold text-[#1a3a5c] truncate">{n.project_name}</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">
+                  <div className="truncate text-[13px] font-medium" style={{ color: 'var(--text)' }}>{n.project_name}</div>
+                  <div className="mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
                     {n.source && <span className="font-medium">{n.source} · </span>}
                     {n.bid_due_date ? `Due ${formatDate(n.bid_due_date)}` : 'No due date'}
                   </div>

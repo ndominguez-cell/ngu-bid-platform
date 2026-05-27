@@ -8,8 +8,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect('/login');
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, title')
+    .eq('id', user.id)
+    .single();
+
   return (
-    <AppShell userEmail={user.email}>
+    <AppShell
+      userEmail={user.email}
+      userName={profile?.full_name ?? undefined}
+      userTitle={profile?.title ?? undefined}
+    >
       {children}
     </AppShell>
   );

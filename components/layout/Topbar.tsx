@@ -1,20 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { Search, Inbox, Sun, Moon } from 'lucide-react';
 import NotificationBell from '@/components/notifications/NotificationBell';
 
-interface Crumb {
-  label: string;
-  href?: string;
+const SECTION_LABELS: Record<string, string> = {
+  dashboard:  'Dashboard',
+  bids:       'Bids',
+  estimates:  'Estimates',
+  proposals:  'Proposals',
+  crm:        'CRM',
+  analytics:  'Analytics',
+  settings:   'Settings',
+  new:        'New',
+};
+
+function useCrumbs() {
+  const pathname = usePathname();
+  const segments = pathname.split('/').filter(Boolean);
+  const crumbs: { label: string; href?: string }[] = [];
+  let path = '';
+  for (let i = 0; i < segments.length; i++) {
+    path += `/${segments[i]}`;
+    const label = SECTION_LABELS[segments[i]] ?? segments[i];
+    const isLast = i === segments.length - 1;
+    crumbs.push({ label, href: isLast ? undefined : path });
+  }
+  return crumbs;
 }
 
-interface TopbarProps {
-  crumbs?: Crumb[];
-}
-
-export default function Topbar({ crumbs = [] }: TopbarProps) {
+export default function Topbar() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const crumbs = useCrumbs();
 
   useEffect(() => {
     const saved = localStorage.getItem('ngu-theme') as 'light' | 'dark' | null;
@@ -30,25 +49,23 @@ export default function Topbar({ crumbs = [] }: TopbarProps) {
 
   return (
     <header
-      className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b px-7 backdrop-blur supports-[backdrop-filter]:bg-[var(--bg)]/80"
+      className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b px-7"
       style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}
     >
       {/* Breadcrumbs */}
       <div className="flex items-center gap-1.5 text-[13px]" style={{ color: 'var(--text-muted)' }}>
         {crumbs.map((c, i) => (
           <span key={i} className="inline-flex items-center gap-1.5">
-            {c.href && i < crumbs.length - 1 ? (
-              <a
+            {c.href ? (
+              <Link
                 href={c.href}
-                className="hover:text-[var(--orange)] transition-colors"
+                className="transition-colors hover:text-[var(--orange)]"
                 style={{ color: 'var(--text-muted)' }}
               >
                 {c.label}
-              </a>
+              </Link>
             ) : (
-              <strong className="font-medium" style={{ color: 'var(--text)' }}>
-                {c.label}
-              </strong>
+              <strong className="font-medium" style={{ color: 'var(--text)' }}>{c.label}</strong>
             )}
             {i < crumbs.length - 1 && (
               <span style={{ color: 'var(--text-subtle)' }}>/</span>
@@ -59,10 +76,10 @@ export default function Topbar({ crumbs = [] }: TopbarProps) {
 
       {/* Search */}
       <div
-        className="ml-auto flex w-[320px] items-center gap-2 rounded border px-2.5 py-1.5 transition-colors focus-within:border-[var(--orange)]"
+        className="ml-auto flex w-[300px] items-center gap-2 rounded border px-2.5 py-1.5 transition-colors focus-within:border-[var(--orange)]"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <Search size={14} style={{ color: 'var(--text-muted)' }} />
+        <Search size={13} style={{ color: 'var(--text-muted)' }} />
         <input
           type="text"
           placeholder="Search bids, GCs, projects…"
@@ -78,18 +95,18 @@ export default function Topbar({ crumbs = [] }: TopbarProps) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <button
           onClick={toggleTheme}
           className="icon-btn"
           title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
           aria-label="Toggle theme"
         >
-          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         </button>
         <NotificationBell />
         <button className="icon-btn" aria-label="Inbox">
-          <Inbox size={16} />
+          <Inbox size={15} />
         </button>
       </div>
     </header>

@@ -6,10 +6,12 @@ import Topbar from './Topbar';
 
 interface AppShellProps {
   userEmail?: string;
+  userName?: string;
+  userTitle?: string;
   children: React.ReactNode;
 }
 
-export default async function AppShell({ userEmail, children }: AppShellProps) {
+export default async function AppShell({ userEmail, userName, userTitle, children }: AppShellProps) {
   const supabase = createClient();
   const { data: bids } = await supabase
     .from('bids')
@@ -29,6 +31,8 @@ export default async function AppShell({ userEmail, children }: AppShellProps) {
     >
       <Sidebar
         userEmail={userEmail}
+        userName={userName}
+        userTitle={userTitle}
         urgentCount={urgentCount}
         bidsCount={active.length}
       />
