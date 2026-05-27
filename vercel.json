@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/api/estimates/route.ts": { "maxDuration": 60 },
+    "app/api/proposals/draft/route.ts": { "maxDuration": 60 },
+    "app/api/gmail/sync/route.ts": { "maxDuration": 60 }
+  }
+}

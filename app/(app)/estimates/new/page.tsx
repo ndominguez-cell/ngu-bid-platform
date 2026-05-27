@@ -94,16 +94,14 @@ function NewEstimateContent() {
         }),
       });
 
-      let data;
-      const contentType = res.headers.get('content-type') ?? '';
-      if (contentType.includes('application/json')) {
+      let data: Record<string, unknown> = {};
+      try {
         data = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error(text || 'Server error');
+      } catch {
+        const text = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(`Server error: ${text.substring(0, 200)}`);
       }
-
-      if (!res.ok) throw new Error(data.error || 'Estimate generation failed');
+      if (!res.ok) throw new Error((data.error as string) || `Error ${res.status}`);
       setResult(data);
       setStep('review');
     } catch (err: unknown) {
