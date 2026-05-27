@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -100,7 +100,7 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
   try {
     let fullText = '';
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 8;
 
     // Run Claude with web search, looping to handle multi-turn tool use
     let messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
@@ -124,15 +124,15 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
       // If stopped or no more tool calls, we're done
       if (response.stop_reason === 'end_turn' || response.stop_reason === 'max_tokens') break;
 
-      // If Claude wants to use tools, add the response to messages and continue
-      if (response.stop_reason === 'tool_use') {
+      // tool_use: regular or server-side tool called; pause_turn: Anthropic paused
+      // a long-running turn (e.g. while executing web_search server-side).
+      // In both cases, append the assistant turn and continue — Anthropic handles
+      // server-side tool execution transparently on the next request.
+      if (response.stop_reason === 'tool_use' || response.stop_reason === 'pause_turn') {
         messages = [
           ...messages,
           { role: 'assistant', content: response.content },
         ];
-        // The web_search_20250305 tool is server-side — Anthropic executes it,
-        // so we just loop back and Claude will have the results in context.
-        // If for any reason we get tool_use stop without server execution, break.
         if (attempts >= maxAttempts) break;
         continue;
       }
@@ -169,6 +169,7 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
     return NextResponse.json(report);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Plan search failed';
+    console.error('[find-plans] error:', message, err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

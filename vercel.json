@@ -2,6 +2,8 @@
   "functions": {
     "app/api/estimates/route.ts": { "maxDuration": 60 },
     "app/api/proposals/draft/route.ts": { "maxDuration": 60 },
-    "app/api/gmail/sync/route.ts": { "maxDuration": 60 }
+    "app/api/gmail/sync/route.ts": { "maxDuration": 60 },
+    "app/api/bids/[id]/find-plans/route.ts": { "maxDuration": 300 },
+    "app/api/gmail/detect-bids/route.ts": { "maxDuration": 120 }
   }
 }
