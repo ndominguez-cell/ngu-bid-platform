@@ -17,7 +17,7 @@ export default function ProposalSendButton({ proposalId, gcEmail, status }: Prop
 
   if (status === 'Sent') {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-green-600 font-semibold px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-2" style={{ color: 'var(--ok)' }}>
         <CheckCircle2 size={13} /> Sent via Gmail
       </div>
     );
@@ -25,7 +25,9 @@ export default function ProposalSendButton({ proposalId, gcEmail, status }: Prop
 
   if (!gcEmail) {
     return (
-      <span className="text-xs text-gray-400 px-3 py-2">No recipient email on bid</span>
+      <span className="text-[12px] px-3 py-2" style={{ color: 'var(--text-subtle)' }}>
+        No recipient email on bid
+      </span>
     );
   }
 
@@ -44,16 +46,16 @@ export default function ProposalSendButton({ proposalId, gcEmail, status }: Prop
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 w-full">
       <button
         onClick={handleSend}
         disabled={sending}
-        className="flex items-center justify-center gap-1.5 w-full bg-[#1a3a5c] hover:bg-[#e87722] text-white text-xs font-bold py-2.5 rounded-lg transition-colors disabled:opacity-60"
+        className="btn btn-primary btn-sm w-full flex items-center justify-center gap-1.5"
       >
         {sending ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
-        {sending ? 'Sending…' : 'Send via Gmail'}
+        {sending ? 'Sending…' : 'Send Now'}
       </button>
-      {error && <p className="text-[10px] text-red-600 text-center">{error}</p>}
+      {error && <p className="text-[11px] text-center" style={{ color: 'var(--bad)' }}>{error}</p>}
     </div>
   );
 }
