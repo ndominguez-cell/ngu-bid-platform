@@ -3,6 +3,8 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { getValidAccessToken, gmailFetch } from '@/lib/gmail';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 120;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Fetch the plain-text body from a Gmail message payload
