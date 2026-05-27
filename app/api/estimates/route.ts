@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 60;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
@@ -57,8 +59,8 @@ Use current Texas market rates (2025-2026). Be conservative but realistic. Only 
     }];
 
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 4000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
       messages: claudeMessages,
     });
 
