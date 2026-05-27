@@ -9,15 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.99.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
-    "next": "14.2.29",
-    "react": "^18",
-    "react-dom": "^18",
-    "lucide-react": "^0.383.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
-    "@anthropic-ai/sdk": "^0.27.3"
+    "lucide-react": "^0.383.0",
+    "next": "14.2.29",
+    "react": "^18",
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",

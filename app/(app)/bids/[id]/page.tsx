@@ -5,6 +5,7 @@ import type { Bid, Conversation } from '@/lib/types';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Mail, MapPin, Calendar, DollarSign, MessageSquare } from 'lucide-react';
 import BidStatusUpdater from './BidStatusUpdater';
+import FindPlansButton from './FindPlansButton';
 
 export const revalidate = 0;
 
@@ -42,7 +43,7 @@ export default async function BidDetailPage({ params }: { params: { id: string }
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap justify-end">
           {bid.plans_link && (
             <a href={bid.plans_link} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs bg-[#1a3a5c] text-white px-3 py-2 rounded-lg hover:bg-[#e87722] transition-colors font-semibold">
@@ -133,8 +134,9 @@ export default async function BidDetailPage({ params }: { params: { id: string }
               </Link>
             </div>
             {(!bid.estimates || bid.estimates.length === 0) ? (
-              <div className="text-center py-6 text-gray-400 text-sm">
-                No estimates yet — upload plans to create one
+              <div className="py-4 text-gray-400 text-sm">
+                <p className="text-center mb-1">No estimates yet — upload plans to create one</p>
+                <FindPlansButton bidId={bid.id} hasPlansLink={!!bid.plans_link} />
               </div>
             ) : (
               <div className="space-y-2">
