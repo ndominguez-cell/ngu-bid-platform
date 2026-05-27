@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
+import ProfileEditor from './ProfileEditor';
+import GmailDisconnectButton from './GmailDisconnectButton';
 
 export const revalidate = 0;
 
@@ -15,7 +17,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-[#1a3a5c] mb-6">Settings</h1>
 
-      {/* Status toast */}
+      {/* Status toasts */}
       {gmailStatus === 'connected' && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl px-4 py-3 font-medium">
           ✓ Gmail connected successfully
@@ -27,27 +29,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
         </div>
       )}
 
+      {/* Account — editable */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-5">
-        <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider mb-4">Your Account</h2>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Name</label>
-            <p className="text-sm font-medium text-gray-700">{profile?.full_name ?? '—'}</p>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Email</label>
-            <p className="text-sm font-medium text-gray-700">{user?.email}</p>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Role</label>
-            <p className="text-sm font-medium text-gray-700 capitalize">{profile?.role ?? 'estimator'}</p>
-          </div>
-        </div>
+        <ProfileEditor
+          userId={user!.id}
+          initialName={profile?.full_name ?? null}
+          initialTitle={profile?.title ?? null}
+          initialRole={profile?.role ?? 'estimator'}
+          email={user!.email ?? ''}
+        />
       </div>
 
+      {/* Integrations */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider mb-4">Integrations</h2>
         <div className="space-y-3">
+
           {/* Gmail */}
           <div className="flex items-center justify-between p-4 border border-gray-100 rounded-xl">
             <div>
@@ -64,9 +61,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
                 <>
                   <span className="text-xs font-bold bg-green-100 text-green-700 px-2.5 py-1 rounded-full">Connected ✓</span>
                   <Link href="/api/auth/google"
-                    className="text-xs text-gray-400 hover:text-gray-600 font-medium underline">
+                    className="text-xs text-gray-400 hover:text-[#1a3a5c] font-semibold underline transition-colors">
                     Reconnect
                   </Link>
+                  <GmailDisconnectButton />
                 </>
               ) : (
                 <Link href="/api/auth/google"
@@ -87,16 +85,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
               {process.env.ANTHROPIC_API_KEY ? 'Connected ✓' : 'Needs API Key'}
             </span>
           </div>
+
         </div>
       </div>
 
-      {/* Phase 2 setup notes — only shown if Gmail not yet connected */}
+      {/* Setup note — only when Gmail not connected */}
       {!gmailConnected && (
         <div className="mt-4 bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700">
           <p className="font-bold mb-1">To connect Gmail:</p>
           <ol className="list-decimal list-inside space-y-1 text-blue-600">
-            <li>Create a project in Google Cloud Console</li>
-            <li>Enable the Gmail API</li>
+            <li>Create a Google Cloud project and enable the Gmail API</li>
             <li>Create OAuth 2.0 credentials (Web application type)</li>
             <li>Add <code className="bg-blue-100 px-1 rounded">{process.env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback</code> as an authorized redirect URI</li>
             <li>Add <code className="bg-blue-100 px-1 rounded">GOOGLE_CLIENT_ID</code>, <code className="bg-blue-100 px-1 rounded">GOOGLE_CLIENT_SECRET</code>, and <code className="bg-blue-100 px-1 rounded">GOOGLE_REDIRECT_URI</code> to your Vercel environment variables</li>
