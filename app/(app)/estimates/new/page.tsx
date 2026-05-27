@@ -3,6 +3,7 @@
 import { Suspense, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 type Step = 'upload' | 'uploading' | 'processing' | 'review';
 
@@ -46,7 +47,7 @@ function NewEstimateContent() {
       setUploadProgress(`Uploading file ${i + 1} of ${files.length}: ${file.name}`);
 
       try {
-        // Get signed upload URL
+        // Get signed upload token from server (service role creates it)
         const presignRes = await fetch('/api/estimates/presign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -56,15 +57,16 @@ function NewEstimateContent() {
           const err = await presignRes.json();
           throw new Error(err.error || 'Failed to get upload URL');
         }
-        const { signedUrl, path } = await presignRes.json();
+        const { path, token } = await presignRes.json();
 
-        // Upload directly to Supabase Storage (bypasses Vercel size limits)
-        const uploadRes = await fetch(signedUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
-          body: file,
-        });
-        if (!uploadRes.ok) throw new Error(`Upload failed for ${file.name}`);
+        // Upload directly to Supabase Storage via SDK (bypasses Vercel size limits)
+        const supabase = createClient();
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .uploadToSignedUrl(path, token, file, {
+            contentType: file.type || 'application/octet-stream',
+          });
+        if (uploadError) throw new Error(`Upload failed for ${file.name}: ${uploadError.message}`);
 
         storagePaths.push(path);
         fileNames.push(file.name);
