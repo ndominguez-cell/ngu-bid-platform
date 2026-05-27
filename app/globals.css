@@ -2,15 +2,166 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   NGU Bid Platform — design tokens
+   ============================================================ */
+
 @layer base {
-  * { box-sizing: border-box; }
+  :root {
+    /* Surfaces */
+    --bg:           oklch(0.985 0.003 250);
+    --surface:      #ffffff;
+    --surface-2:    oklch(0.97 0.004 250);
+    --surface-3:    oklch(0.955 0.005 250);
+    --border:       oklch(0.91 0.008 250);
+    --border-strong:oklch(0.85 0.012 250);
+
+    /* NGU brand */
+    --navy:         #1a3a5c;
+    --navy-soft:    oklch(0.95 0.025 245);
+    --navy-ink:     #11253b;
+    --orange:       #e87722;
+    --orange-hover: #d96a18;
+    --orange-soft:  oklch(0.96 0.05 60);
+    --orange-ink:   oklch(0.52 0.15 50);
+
+    /* Ink */
+    --text:         var(--navy);
+    --text-2:       oklch(0.40 0.020 245);
+    --text-muted:   oklch(0.55 0.015 245);
+    --text-subtle:  oklch(0.70 0.010 245);
+
+    /* Status — shared chroma for harmony */
+    --ok:           oklch(0.55 0.14 150);
+    --ok-soft:      oklch(0.95 0.05 150);
+    --warn:         oklch(0.65 0.15 80);
+    --warn-soft:    oklch(0.96 0.07 90);
+    --bad:          oklch(0.55 0.20 25);
+    --bad-soft:     oklch(0.95 0.06 25);
+    --info:         oklch(0.50 0.10 230);
+    --info-soft:    oklch(0.95 0.03 230);
+
+    /* Type */
+    --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  [data-theme='dark'] {
+    --bg:           oklch(0.18 0.012 245);
+    --surface:      oklch(0.22 0.015 245);
+    --surface-2:    oklch(0.25 0.015 245);
+    --surface-3:    oklch(0.29 0.015 245);
+    --border:       oklch(0.32 0.018 245);
+    --border-strong:oklch(0.42 0.020 245);
+
+    --navy:         oklch(0.94 0.01 245);
+    --navy-soft:    oklch(0.30 0.04 245);
+    --navy-ink:     oklch(0.96 0.005 245);
+    --orange:       oklch(0.78 0.18 55);
+    --orange-hover: oklch(0.82 0.19 55);
+    --orange-soft:  oklch(0.30 0.07 55);
+    --orange-ink:   oklch(0.82 0.18 55);
+
+    --text:         var(--navy);
+    --text-2:       oklch(0.82 0.012 245);
+    --text-muted:   oklch(0.62 0.014 245);
+    --text-subtle:  oklch(0.48 0.014 245);
+
+    --ok:           oklch(0.74 0.14 150);
+    --ok-soft:      oklch(0.28 0.06 150);
+    --warn:         oklch(0.78 0.15 80);
+    --warn-soft:    oklch(0.32 0.07 80);
+    --bad:          oklch(0.72 0.18 25);
+    --bad-soft:     oklch(0.32 0.08 25);
+    --info:         oklch(0.74 0.12 230);
+    --info-soft:    oklch(0.30 0.06 230);
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection { background: var(--orange-soft); color: var(--orange-ink); }
+}
+
+/* ============================================================
+   Component helper classes — used by Tailwind via @apply or directly
+   ============================================================ */
+
+@layer components {
+  /* Tag — generic */
+  .tag {
+    @apply inline-flex items-center gap-1.5 h-[22px] px-2 rounded font-mono text-[11px] tracking-wide whitespace-nowrap;
+    background: var(--surface-3);
+    color: var(--text-2);
+  }
+  .tag .dot { @apply w-1.5 h-1.5 rounded-full bg-current opacity-70; }
+  .tag-ok   { background: var(--ok-soft);     color: var(--ok); }
+  .tag-warn { background: var(--warn-soft);   color: oklch(0.45 0.13 70); }
+  .tag-bad  { background: var(--bad-soft);    color: var(--bad); }
+  .tag-info { background: var(--info-soft);   color: var(--info); }
+  .tag-navy { background: var(--navy-soft);   color: var(--navy); }
+  .tag-orange { background: var(--orange-soft); color: var(--orange-ink); }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    @apply rounded-md overflow-hidden;
+  }
+  .card-head {
+    @apply flex items-center justify-between px-[18px] py-3.5 gap-3;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-title { @apply text-[13.5px] font-semibold; color: var(--text); }
+
+  /* Button */
+  .btn {
+    @apply inline-flex items-center gap-2 h-[34px] px-3.5 rounded text-[13px] font-medium whitespace-nowrap transition-colors;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+  .btn-primary { background: var(--navy); color: white; border-color: var(--navy); }
+  .btn-primary:hover { background: var(--orange); border-color: var(--orange); }
+  .btn-accent  { background: var(--orange); color: white; border-color: var(--orange); }
+  .btn-accent:hover { background: var(--orange-hover); border-color: var(--orange-hover); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
+  .btn-sm { @apply h-7 px-2.5 text-[12px]; }
+
+  /* Icon button */
+  .icon-btn {
+    @apply w-[34px] h-[34px] grid place-items-center rounded transition-colors;
+    background: var(--surface);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+
+  /* Label / mono helpers */
+  .label-mono {
+    @apply font-mono text-[10.5px] uppercase tracking-wider;
+    color: var(--text-subtle);
+  }
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }
 
-@layer utilities {
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 8px;
+  border: 2px solid var(--bg);
 }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+[data-theme='dark'] ::-webkit-scrollbar-thumb { background: oklch(0.32 0.015 245); border-color: var(--bg); }
