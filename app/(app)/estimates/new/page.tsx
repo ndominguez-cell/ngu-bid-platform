@@ -29,7 +29,19 @@ function NewEstimateContent() {
     const dropped = Array.from(e.dataTransfer.files).filter(f =>
       f.type === 'application/pdf' || f.type.startsWith('image/')
     );
-    setFiles(prev => [...prev, ...dropped]);
+    handleFileChange(dropped);
+  }
+
+  const MAX_FILE_SIZE = 102_400_000; // 100,000 KB
+
+  function handleFileChange(incoming: File[]) {
+    const tooBig = incoming.filter(f => f.size > MAX_FILE_SIZE);
+    if (tooBig.length) {
+      setError(`File too large: ${tooBig.map(f => f.name).join(', ')} — max 100,000 KB per file`);
+      return;
+    }
+    setError('');
+    setFiles(prev => [...prev, ...incoming]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -218,9 +230,9 @@ function NewEstimateContent() {
         >
           <Upload size={32} className="mx-auto text-gray-300 mb-3" />
           <p className="font-semibold text-gray-600">Drop plans, specs, or documents here</p>
-          <p className="text-xs text-gray-400 mt-1">PDF or images · Multiple files OK · Any size</p>
+          <p className="text-xs text-gray-400 mt-1">PDF or images · Multiple files OK · Max 100,000 KB per file</p>
           <input ref={fileRef} type="file" multiple accept=".pdf,image/*" className="hidden"
-            onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])} />
+            onChange={e => handleFileChange(Array.from(e.target.files ?? []))} />
         </div>
 
         {/* File list */}
@@ -230,7 +242,9 @@ function NewEstimateContent() {
               <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
                 <FileText size={14} className="text-[#1a3a5c]" />
                 <span className="text-sm text-gray-700 flex-1 truncate">{f.name}</span>
-                <span className="text-xs text-gray-400">{(f.size / 1024).toFixed(0)} KB</span>
+                <span className="text-xs text-gray-400">
+                  {f.size >= 1_048_576 ? `${(f.size / 1_048_576).toFixed(1)} MB` : `${(f.size / 1024).toFixed(0)} KB`}
+                </span>
                 <button type="button" onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
                   className="text-gray-300 hover:text-red-400 text-lg leading-none">×</button>
               </div>
