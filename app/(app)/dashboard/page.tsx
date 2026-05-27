@@ -58,7 +58,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Stat cards */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
         {[
           { label: 'Total Bids', value: bids.length, icon: TrendingUp, color: 'border-[#e87722]' },
           { label: 'Due ≤ 3 Days', value: urgent.length, icon: AlertCircle, color: 'border-red-500', valueColor: 'text-red-600' },
@@ -73,9 +73,9 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Upcoming bids table */}
-        <div className="col-span-2 bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Upcoming Bids</h2>
             <Link href="/bids" className="text-xs text-[#e87722] font-semibold hover:underline">View all →</Link>

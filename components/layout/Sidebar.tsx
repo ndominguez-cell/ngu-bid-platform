@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
-  LayoutDashboard, FileText, Calculator, Users, Send, Settings, LogOut,
+  LayoutDashboard, FileText, Calculator, Users, Send, Settings, LogOut, BarChart2, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationBell from '@/components/notifications/NotificationBell';
@@ -15,9 +15,10 @@ const NAV = [
   { href: '/estimates',  label: 'Estimates',   icon: Calculator },
   { href: '/crm',        label: 'CRM',         icon: Users },
   { href: '/proposals',  label: 'Proposals',   icon: Send },
+  { href: '/analytics',  label: 'Analytics',   icon: BarChart2 },
 ];
 
-export default function Sidebar({ userEmail }: { userEmail?: string }) {
+export default function Sidebar({ userEmail, onClose }: { userEmail?: string; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -35,10 +36,19 @@ export default function Sidebar({ userEmail }: { userEmail?: string }) {
         <div className="bg-[#e87722] px-2.5 py-1.5 rounded-md">
           <span className="text-white font-black text-base tracking-widest">NGU</span>
         </div>
-        <div>
+        <div className="flex-1">
           <div className="text-white font-bold text-sm tracking-wide leading-tight">BID PLATFORM</div>
           <div className="text-white/40 text-[10px] tracking-wide">NGU Construction</div>
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden text-white/40 hover:text-white transition-colors ml-auto"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       {/* Nav */}
@@ -49,6 +59,7 @@ export default function Sidebar({ userEmail }: { userEmail?: string }) {
             <Link
               key={href}
               href={href}
+              onClick={onClose}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
                 active

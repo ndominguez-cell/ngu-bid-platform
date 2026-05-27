@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import ProfileEditor from './ProfileEditor';
 import GmailDisconnectButton from './GmailDisconnectButton';
+import TeamManager from './TeamManager';
 
 export const revalidate = 0;
 
@@ -88,6 +89,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
 
         </div>
       </div>
+
+      {/* Team Management — admin only */}
+      {profile?.role === 'admin' && (
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-5">
+          <TeamManager currentUserId={user!.id} />
+        </div>
+      )}
 
       {/* Setup note — only when Gmail not connected */}
       {!gmailConnected && (

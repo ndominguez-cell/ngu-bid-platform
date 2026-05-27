@@ -3,6 +3,7 @@ import { getDaysLeft, formatDate, STATUS_COLORS, getUrgencyClass, getUrgencyLabe
 import type { Bid, BidStatus } from '@/lib/types';
 import Link from 'next/link';
 import { ExternalLink, Mail } from 'lucide-react';
+import GmailImportButton from './GmailImportButton';
 
 export const revalidate = 0;
 
@@ -22,7 +23,8 @@ export default async function BidsPage() {
           <h1 className="text-2xl font-bold text-[#1a3a5c]">Bids</h1>
           <p className="text-gray-500 text-sm mt-0.5">{bids.length} total bid requests</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <GmailImportButton />
           <Link href="/bids/new" className="bg-[#1a3a5c] hover:bg-[#e87722] text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors">
             + New Bid
           </Link>

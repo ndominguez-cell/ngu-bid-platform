@@ -1,0 +1,158 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { Loader2, Users, Shield, Eye, Pencil } from 'lucide-react';
+import type { UserRole } from '@/lib/types';
+
+interface TeamMember {
+  id: string;
+  email: string | undefined;
+  full_name: string | null;
+  title: string | null;
+  role: UserRole;
+  created_at: string;
+}
+
+const ROLE_INFO: Record<UserRole, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
+  admin: {
+    label: 'Admin',
+    icon: <Shield size={12} />,
+    color: 'bg-red-100 text-red-700',
+    desc: 'Full access — create, edit, delete, manage team',
+  },
+  estimator: {
+    label: 'Estimator',
+    icon: <Pencil size={12} />,
+    color: 'bg-blue-100 text-blue-700',
+    desc: 'Create and edit bids, estimates, proposals',
+  },
+  viewer: {
+    label: 'Viewer',
+    icon: <Eye size={12} />,
+    color: 'bg-gray-100 text-gray-600',
+    desc: 'Read-only access — cannot create or edit',
+  },
+};
+
+export default function TeamManager({ currentUserId }: { currentUserId: string }) {
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/team');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load team');
+      setTeam(data.team);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load team');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function updateRole(userId: string, role: UserRole) {
+    setSaving(userId);
+    try {
+      const res = await fetch('/api/team', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed');
+      setTeam(prev => prev.map(m => m.id === userId ? { ...m, role } : m));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8 text-gray-400">
+        <Loader2 size={18} className="animate-spin mr-2" /> Loading team…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-4">{error}</div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <Users size={14} className="text-[#1a3a5c]" />
+        <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Team Members</h2>
+        <span className="text-xs text-gray-400 ml-auto">{team.length} member{team.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Role legend */}
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        {(Object.entries(ROLE_INFO) as [UserRole, typeof ROLE_INFO[UserRole]][]).map(([role, info]) => (
+          <div key={role} className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+            <div className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1 ${info.color}`}>
+              {info.icon} {info.label}
+            </div>
+            <p className="text-[10px] text-gray-500">{info.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {team.map(member => {
+          const roleInfo = ROLE_INFO[member.role];
+          const isMe = member.id === currentUserId;
+          return (
+            <div key={member.id} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
+              <div className="w-8 h-8 bg-[#1a3a5c] rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">
+                {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-700 truncate">
+                    {member.full_name || member.email}
+                  </span>
+                  {isMe && <span className="text-[9px] font-bold bg-[#e87722]/10 text-[#e87722] px-1.5 py-0.5 rounded-full">You</span>}
+                </div>
+                {member.full_name && <p className="text-[11px] text-gray-400 truncate">{member.email}</p>}
+                {member.title && <p className="text-[10px] text-gray-400">{member.title}</p>}
+              </div>
+              <div className="shrink-0">
+                {isMe ? (
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${roleInfo.color}`}>
+                    {roleInfo.icon} {roleInfo.label}
+                  </span>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    {saving === member.id && <Loader2 size={12} className="animate-spin text-gray-400" />}
+                    <select
+                      value={member.role}
+                      onChange={e => updateRole(member.id, e.target.value as UserRole)}
+                      disabled={saving === member.id}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#1a3a5c] ${roleInfo.color}`}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="estimator">Estimator</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

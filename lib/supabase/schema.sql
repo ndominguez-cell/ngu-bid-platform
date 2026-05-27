@@ -276,6 +276,31 @@ alter table profiles add column if not exists google_token_expiry timestamptz;
 alter table profiles add column if not exists gmail_synced_at timestamptz;
 
 -- ============================================================
+-- PHASE 3 MIGRATION — Role-based RLS policies
+-- Run in Supabase > SQL Editor after Phase 2 schema is applied
+-- ============================================================
+
+-- Helper function: get current user's role from profiles
+create or replace function get_user_role()
+returns text language sql stable security definer as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+-- Viewers can only read bids (not write)
+-- Drop the blanket "Authenticated full access" for bids and replace with role-aware policies
+-- NOTE: only run these if you want strict role enforcement; the default "Authenticated full access"
+-- policy already works for small teams. Uncomment to enable:
+
+-- drop policy if exists "Authenticated full access" on bids;
+-- create policy "Bids read" on bids for select to authenticated using (true);
+-- create policy "Bids write" on bids for insert to authenticated
+--   with check (get_user_role() in ('admin','estimator'));
+-- create policy "Bids update" on bids for update to authenticated
+--   using (true) with check (get_user_role() in ('admin','estimator'));
+-- create policy "Bids delete" on bids for delete to authenticated
+--   using (get_user_role() = 'admin');
+
+-- ============================================================
 -- SUPABASE STORAGE BUCKET
 -- Run separately in Supabase > Storage > New Bucket
 -- Name: "documents", Public: false

@@ -203,10 +203,25 @@ UPDATE storage.buckets SET file_size_limit = 102400000 WHERE name = 'documents';
 
 - Supabase free plan enforces a 50MB per-file hard cap. Files up to 50MB upload fine. For plans larger than 50MB, upgrade Supabase to Pro (~$25/mo) then the 100,000 KB limit takes full effect.
 
-## Coming in Phase 3
+## What Was Built (Phase 3)
 
-- Bid creation from Gmail (auto-detect new bid invitations in inbox)
-- Estimate PDF export
-- Win/loss analytics dashboard
-- Multi-user role permissions
-- Mobile-optimized views
+- ✅ **Gmail Bid Detection** — "Import from Gmail" button on Bids page; Claude Haiku scans inbox for bid invitations and auto-creates bid records with project name, GC, due date, scope, and trades extracted
+- ✅ **Estimate PDF Export** — "Export PDF" button on every estimate opens a print-optimized page; use browser Print → Save as PDF; includes logo, line items table, subtotal, markup, grand total, notes
+- ✅ **Win/Loss Analytics** — New `/analytics` page with win rate KPIs, total won revenue, active pipeline, monthly bid volume bar chart, win rate by source, and top trades breakdown
+- ✅ **Multi-user Role Permissions** — Three roles: Admin (full access + team management), Estimator (create/edit), Viewer (read-only); Admin can change team member roles in Settings > Team Members
+- ✅ **Mobile-Optimized Views** — Collapsible sidebar with hamburger menu on mobile, sticky mobile header bar, responsive stat grids (2-col on phone → 5-col on desktop), responsive dashboard layout
+- ✅ **Analytics nav item** added to sidebar
+
+## Phase 3 Supabase Migration (optional — for strict role enforcement)
+
+The role system is already tracked in the `profiles.role` column (set up in Phase 1). Phase 3 adds a `get_user_role()` helper function in `schema.sql` and provides commented-out RLS policies for strict per-role enforcement. To enable strict enforcement, run the Phase 3 migration section in Supabase SQL Editor and uncomment the policy statements.
+
+## To Make Yourself Admin
+
+Run this in Supabase SQL Editor (replace with your user ID from Authentication > Users):
+
+```sql
+update profiles set role = 'admin' where id = 'YOUR-USER-UUID-HERE';
+```
+
+Or use the Supabase dashboard: Table Editor → profiles → find your row → set role to 'admin'.

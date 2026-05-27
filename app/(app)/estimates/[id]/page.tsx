@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Printer } from 'lucide-react';
 import EstimateEditor from './EstimateEditor';
 
 export const revalidate = 0;
@@ -50,6 +50,13 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
             <span className="text-xs text-gray-400">{formatDate(est.created_at)}</span>
           </div>
         </div>
+        <Link
+          href={`/estimates/${est.id}/print`}
+          target="_blank"
+          className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 px-3 py-2 rounded-lg hover:border-[#1a3a5c] hover:text-[#1a3a5c] transition-colors font-semibold"
+        >
+          <Printer size={13} /> Export PDF
+        </Link>
       </div>
 
       {/* AI Summary */}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, Save, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Save, Loader2, Printer } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 type EstimateStatus = 'Draft' | 'In Review' | 'Approved' | 'Submitted' | 'Archived';
@@ -261,12 +261,20 @@ export default function EstimateEditor({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <button onClick={handleSave} disabled={saving}
           className="bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-5 py-2.5 rounded-lg text-sm transition-colors disabled:opacity-60 flex items-center gap-2">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           {saving ? 'Saving…' : 'Save Changes'}
         </button>
+        <a
+          href={`/estimates/${estimateId}/print`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 border border-gray-200 text-gray-600 font-semibold px-5 py-2.5 rounded-lg text-sm hover:border-[#1a3a5c] hover:text-[#1a3a5c] transition-colors"
+        >
+          <Printer size={14} /> Export PDF
+        </a>
         {bidId && (
           <a href={`/proposals/new?bid=${bidId}&estimate=${estimateId}`}
             className="bg-[#e87722] hover:bg-[#d06a1a] text-white font-bold px-5 py-2.5 rounded-lg text-sm transition-colors">
