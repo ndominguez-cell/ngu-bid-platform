@@ -166,11 +166,47 @@ Once you're signed in:
 - ✅ Seed endpoint (imports existing 29 bids from bids.json)
 - ✅ Vercel-ready deployment config
 
-## Coming in Phase 2
+## What Was Built (Phase 2)
 
-- Gmail OAuth integration (scan inbox from within the app)
-- Auto-extract contacts from bid emails
-- Real-time bid notifications
-- Estimate line-item editor (edit quantities and prices in the browser)
-- Proposal send via Gmail API
-- CRM conversation history linked to Gmail threads
+- ✅ Estimate line-item editor — inline editable table (qty, unit price, trade, description), add/delete rows, editable markup %, status dropdown, Save button
+- ✅ Real-time bid notifications — bell icon in sidebar, Supabase Realtime subscription, unread count badge, dropdown list of new bids
+- ✅ Gmail OAuth integration — Connect Gmail in Settings, full server-side OAuth2 flow, tokens stored in profiles table
+- ✅ Gmail inbox sync — CRM page "Sync from Gmail" button, Claude Haiku extracts contacts/companies from emails, populates conversations table
+- ✅ Send proposals via Gmail API — real email send from proposal detail page, marks proposal Sent with timestamp and thread ID
+- ✅ CRM conversation history — email thread history on bid detail and contact detail pages
+- ✅ Editable Settings page — edit name, title, role inline; Gmail disconnect button
+- ✅ PDF upload via direct Supabase Storage (bypasses Vercel 4.5MB limit), 100,000 KB client-side limit
+- ✅ Vercel Pro + vercel.json — 60s function timeout for AI routes
+- ✅ All AI routes on claude-sonnet-4-6 with maxDuration=60
+
+## Phase 2 Environment Variables (add to Vercel)
+
+| Variable | Value |
+|---|---|
+| `GOOGLE_CLIENT_ID` | From Google Cloud Console → APIs & Services → Credentials |
+| `GOOGLE_CLIENT_SECRET` | Same location |
+| `GOOGLE_REDIRECT_URI` | `https://ngu-bid-platform.vercel.app/api/auth/google/callback` |
+
+## Phase 2 Schema Migration (run in Supabase SQL Editor)
+
+```sql
+alter table profiles add column if not exists google_refresh_token text;
+alter table profiles add column if not exists google_access_token text;
+alter table profiles add column if not exists google_token_expiry timestamptz;
+alter table profiles add column if not exists gmail_synced_at timestamptz;
+
+-- Set storage file size limit (requires Supabase Pro for files > 50MB)
+UPDATE storage.buckets SET file_size_limit = 102400000 WHERE name = 'documents';
+```
+
+## Known Limitation
+
+- Supabase free plan enforces a 50MB per-file hard cap. Files up to 50MB upload fine. For plans larger than 50MB, upgrade Supabase to Pro (~$25/mo) then the 100,000 KB limit takes full effect.
+
+## Coming in Phase 3
+
+- Bid creation from Gmail (auto-detect new bid invitations in inbox)
+- Estimate PDF export
+- Win/loss analytics dashboard
+- Multi-user role permissions
+- Mobile-optimized views
