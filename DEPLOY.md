@@ -211,6 +211,7 @@ UPDATE storage.buckets SET file_size_limit = 102400000 WHERE name = 'documents';
 - ✅ **Multi-user Role Permissions** — Three roles: Admin (full access + team management), Estimator (create/edit), Viewer (read-only); Admin can change team member roles in Settings > Team Members
 - ✅ **Mobile-Optimized Views** — Collapsible sidebar with hamburger menu on mobile, sticky mobile header bar, responsive stat grids (2-col on phone → 5-col on desktop), responsive dashboard layout
 - ✅ **Analytics nav item** added to sidebar
+- ✅ **Bid Plan Finder** — "Find Plans Online" button on bid detail page when no plans are attached; uses Claude with live web search to work through a 5-tier search ladder (exact IDs → owner/municipality → engineer → document types → public records/council packets); auto-saves high-confidence URLs to the bid; shows document checklist, sources checked, and recommended next step
 
 ## Phase 3 Supabase Migration (optional — for strict role enforcement)
 
