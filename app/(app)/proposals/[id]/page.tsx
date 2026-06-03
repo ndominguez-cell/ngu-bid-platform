@@ -4,6 +4,7 @@ import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowLeft, Paperclip, ExternalLink } from 'lucide-react';
 import ProposalSendButton from './ProposalSendButton';
+import ProposalRedraftButton from './ProposalRedraftButton';
 
 export const revalidate = 0;
 
@@ -138,7 +139,7 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
             <p className="text-[12px] mb-3" style={{ color: 'var(--text-muted)' }}>
               Re-generate a fresh draft based on the latest bid data and estimate.
             </p>
-            <button className="btn btn-primary btn-sm w-full">Re-draft</button>
+            <ProposalRedraftButton bidId={p.bid_id} estimateId={p.estimate_id ?? null} />
           </div>
 
           {/* Details */}

@@ -2,8 +2,9 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft, Upload, Download, Sparkles, Send } from 'lucide-react';
+import { ArrowLeft, Download, Sparkles, Send } from 'lucide-react';
 import EstimateEditor from './EstimateEditor';
+import EstimateUploadButton from './EstimateUploadButton';
 
 export const revalidate = 0;
 
@@ -97,11 +98,8 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
 
         {/* Header actions */}
         <div className="flex items-center gap-2 shrink-0">
-          <button className="btn btn-ghost btn-sm flex items-center gap-1.5">
-            <Upload size={13} />
-            Upload Plans
-          </button>
-          <a href={`/estimates/${est.id}/print`} target="_blank" rel="noopener noreferrer"
+          <EstimateUploadButton estimateId={est.id} bidId={est.bid_id} />
+          <a href={`/api/estimates/${est.id}/csv`}
             className="btn btn-ghost btn-sm flex items-center gap-1.5">
             <Download size={13} />
             Export CSV
