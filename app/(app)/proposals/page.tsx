@@ -1,9 +1,16 @@
 import { createClient } from '@/lib/supabase/server';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { Send, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { Send, FileText, CheckCircle2 } from 'lucide-react';
 
 export const revalidate = 0;
+
+const PROP_STATUS: Record<string, { bg: string; color: string }> = {
+  Draft:    { bg: 'var(--surface-2)', color: 'var(--text-muted)' },
+  Reviewed: { bg: 'var(--warn-soft)', color: 'var(--warn)' },
+  Sent:     { bg: 'var(--ok-soft)',   color: 'var(--ok)' },
+  Declined: { bg: 'var(--bad-soft)',  color: 'var(--bad)' },
+};
 
 export default async function ProposalsPage() {
   const supabase = createClient();
@@ -13,73 +20,86 @@ export default async function ProposalsPage() {
     .order('created_at', { ascending: false });
 
   const counts = {
-    Draft: proposals?.filter(p => p.status === 'Draft').length ?? 0,
+    Draft:    proposals?.filter(p => p.status === 'Draft').length    ?? 0,
     Reviewed: proposals?.filter(p => p.status === 'Reviewed').length ?? 0,
-    Sent: proposals?.filter(p => p.status === 'Sent').length ?? 0,
+    Sent:     proposals?.filter(p => p.status === 'Sent').length     ?? 0,
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto w-full max-w-[1480px] px-7 pb-20 pt-6">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#1a3a5c]">Proposals</h1>
-          <p className="text-gray-500 text-sm mt-0.5">AI-drafted · You review · Send via Gmail</p>
+          <h1 className="text-[28px] font-medium leading-tight" style={{ color: 'var(--text)' }}>Proposals</h1>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--text-muted)' }}>AI-drafted · You review · Send via Gmail</p>
         </div>
-        <Link href="/proposals/new" className="flex items-center gap-2 bg-[#1a3a5c] hover:bg-[#e87722] text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors">
-          <Send size={14} /> Draft Proposal
+        <Link href="/proposals/new" className="btn btn-accent btn-sm flex items-center gap-1.5">
+          <Send size={13} /> Draft Proposal
         </Link>
       </div>
 
-      {/* Status cards */}
+      {/* Status KPI tiles */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { label: 'Drafts', count: counts.Draft, icon: FileText, color: 'border-gray-300' },
-          { label: 'Ready to Send', count: counts.Reviewed, icon: CheckCircle2, color: 'border-yellow-400' },
-          { label: 'Sent', count: counts.Sent, icon: Send, color: 'border-green-500', valueColor: 'text-green-600' },
-        ].map(({ label, count, icon: Icon, color, valueColor }) => (
-          <div key={label} className={`bg-white rounded-xl p-4 shadow-sm border-t-4 ${color}`}>
-            <div className={`text-3xl font-black ${valueColor ?? 'text-[#1a3a5c]'}`}>{count}</div>
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mt-1 flex items-center gap-1">
-              <Icon size={12} />{label}
+        {([
+          { label: 'Drafts',       count: counts.Draft,    icon: FileText,    accent: 'var(--border-strong)' },
+          { label: 'Ready to Send',count: counts.Reviewed, icon: CheckCircle2,accent: 'var(--warn)' },
+          { label: 'Sent',         count: counts.Sent,     icon: Send,        accent: 'var(--ok)' },
+        ] as const).map(({ label, count, icon: Icon, accent }) => (
+          <div key={label} className="card p-5" style={{ borderTop: `3px solid ${accent}` }}>
+            <div className="text-[28px] font-bold" style={{ color: accent }}>{count}</div>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider mt-1" style={{ color: 'var(--text-subtle)' }}>
+              <Icon size={11} /> {label}
             </div>
           </div>
         ))}
       </div>
 
       {/* Proposals list */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">All Proposals</h2>
+      <div className="card overflow-hidden p-0">
+        <div className="card-head">
+          <h2 className="card-title">All Proposals</h2>
         </div>
         {(!proposals || proposals.length === 0) ? (
-          <div className="p-12 text-center text-gray-400">
-            <Send size={32} className="mx-auto mb-3 text-gray-200" />
-            <p className="font-medium mb-1">No proposals yet</p>
-            <p className="text-xs max-w-sm mx-auto">Select a bid, choose an estimate, and Claude will draft a professional proposal email ready for your review.</p>
-            <Link href="/proposals/new" className="inline-block mt-4 bg-[#1a3a5c] text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-[#e87722] transition-colors">
+          <div className="p-12 text-center">
+            <Send size={32} className="mx-auto mb-3" style={{ color: 'var(--border-strong)' }} />
+            <p className="font-medium text-[13px] mb-1" style={{ color: 'var(--text-muted)' }}>No proposals yet</p>
+            <p className="text-[12px] max-w-sm mx-auto mb-4" style={{ color: 'var(--text-subtle)' }}>
+              Select a bid, choose an estimate, and Claude will draft a professional proposal email ready for your review.
+            </p>
+            <Link href="/proposals/new" className="btn btn-primary btn-sm inline-flex">
               Draft Your First Proposal
             </Link>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {proposals.map((p: any) => (
-              <Link key={p.id} href={`/proposals/${p.id}`} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-[#1a3a5c] truncate">{p.subject}</div>
-                  <div className="text-xs text-gray-400 mt-0.5 truncate">
-                    {p.bids?.project_name} · {p.bids?.gc_name || p.bids?.gc_email || '—'}
+          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {proposals.map((p: any) => {
+              const s = PROP_STATUS[p.status] ?? PROP_STATUS.Draft;
+              return (
+                <Link
+                  key={p.id}
+                  href={`/proposals/${p.id}`}
+                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--surface-2)]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--text)' }}>{p.subject}</div>
+                    <div className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                      {p.bids?.project_name} · {p.bids?.gc_name || p.bids?.gc_email || '—'}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                    p.status === 'Sent'     ? 'bg-green-100 text-green-700' :
-                    p.status === 'Reviewed' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>{p.status}</span>
-                  <div className="text-[10px] text-gray-400 mt-1">{formatDate(p.created_at)}</div>
-                </div>
-              </Link>
-            ))}
+                  <div className="text-right shrink-0">
+                    <span
+                      className="text-[11px] font-semibold px-2 py-0.5 rounded"
+                      style={{ background: s.bg, color: s.color }}
+                    >
+                      {p.status}
+                    </span>
+                    <div className="text-[11px] mt-1" style={{ color: 'var(--text-subtle)' }}>
+                      {formatDate(p.created_at)}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

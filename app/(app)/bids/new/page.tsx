@@ -46,10 +46,9 @@ export default function NewBidPage() {
     setSaving(true);
     setError('');
 
-    // Auto-generate ID if not provided
     const payload = {
       ...form,
-      id: form.id || undefined, // let DB handle or user provides
+      id: form.id || undefined,
       address: form.address || null,
       city: form.city || null,
       gc_name: form.gc_name || null,
@@ -79,134 +78,117 @@ export default function NewBidPage() {
     }
   }
 
-  const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a3a5c] transition-colors';
-  const labelClass = 'block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1';
-
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <Link href="/bids" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1a3a5c] mb-4 transition-colors">
-        <ArrowLeft size={14} /> Back to Bids
+    <div className="mx-auto w-full max-w-3xl px-7 pb-20 pt-6">
+      <Link href="/bids" className="inline-flex items-center gap-1.5 text-[13px] mb-5 transition-colors" style={{ color: 'var(--text-muted)' }}>
+        <ArrowLeft size={13} /> Bids
       </Link>
-      <h1 className="text-2xl font-bold text-[#1a3a5c] mb-1">New Bid</h1>
-      <p className="text-gray-500 text-sm mb-6">Add a bid request manually</p>
+      <h1 className="text-[28px] font-medium leading-tight mb-1" style={{ color: 'var(--text)' }}>New Bid</h1>
+      <p className="text-[13.5px] mb-6" style={{ color: 'var(--text-muted)' }}>Add a bid request manually</p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Project */}
-        <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
-          <h2 className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Project</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className={labelClass}>Project Name *</label>
-              <input type="text" required value={form.project_name} onChange={e => setForm(p => ({ ...p, project_name: e.target.value }))}
-                placeholder="e.g. Brake Masters McKinney" className={inputClass} />
+        <FormSection title="Project">
+          <div className="col-span-2">
+            <FieldLabel>Project Name *</FieldLabel>
+            <FieldInput required value={form.project_name} onChange={e => setForm(p => ({ ...p, project_name: e.target.value }))}
+              placeholder="e.g. Brake Masters McKinney" />
+          </div>
+          <div>
+            <FieldLabel>Bid ID (optional)</FieldLabel>
+            <FieldInput value={form.id} onChange={e => setForm(p => ({ ...p, id: e.target.value }))}
+              placeholder="BID-2026-030" />
+          </div>
+          <div>
+            <FieldLabel>Source</FieldLabel>
+            <FieldSelect value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))}>
+              {['PlanHub','Procore','Novel','Direct','Other'].map(s => <option key={s}>{s}</option>)}
+            </FieldSelect>
+          </div>
+          <div>
+            <FieldLabel>Address</FieldLabel>
+            <FieldInput value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
+              placeholder="123 Main St" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <FieldLabel>City</FieldLabel>
+              <FieldInput value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))} placeholder="San Antonio" />
             </div>
             <div>
-              <label className={labelClass}>Bid ID (optional)</label>
-              <input type="text" value={form.id} onChange={e => setForm(p => ({ ...p, id: e.target.value }))}
-                placeholder="BID-2026-030" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Source</label>
-              <select value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} className={inputClass}>
-                {['PlanHub','Procore','Novel','Direct','Other'].map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Address</label>
-              <input type="text" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
-                placeholder="123 Main St" className={inputClass} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelClass}>City</label>
-                <input type="text" value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))}
-                  placeholder="San Antonio" className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>State</label>
-                <input type="text" value={form.state} onChange={e => setForm(p => ({ ...p, state: e.target.value }))}
-                  placeholder="TX" className={inputClass} />
-              </div>
-            </div>
-            <div className="col-span-2">
-              <label className={labelClass}>Scope of Work</label>
-              <textarea value={form.scope} onChange={e => setForm(p => ({ ...p, scope: e.target.value }))}
-                rows={3} placeholder="Describe the work NGU would perform..."
-                className={inputClass + ' resize-none'} />
-            </div>
-            <div className="col-span-2">
-              <label className={labelClass}>Plans Link</label>
-              <input type="url" value={form.plans_link} onChange={e => setForm(p => ({ ...p, plans_link: e.target.value }))}
-                placeholder="https://..." className={inputClass} />
+              <FieldLabel>State</FieldLabel>
+              <FieldInput value={form.state} onChange={e => setForm(p => ({ ...p, state: e.target.value }))} placeholder="TX" />
             </div>
           </div>
-        </div>
+          <div className="col-span-2">
+            <FieldLabel>Scope of Work</FieldLabel>
+            <FieldTextarea rows={3} value={form.scope} onChange={e => setForm(p => ({ ...p, scope: e.target.value }))}
+              placeholder="Describe the work NGU would perform…" />
+          </div>
+          <div className="col-span-2">
+            <FieldLabel>Plans Link</FieldLabel>
+            <FieldInput type="url" value={form.plans_link} onChange={e => setForm(p => ({ ...p, plans_link: e.target.value }))}
+              placeholder="https://…" />
+          </div>
+        </FormSection>
 
         {/* GC */}
-        <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
-          <h2 className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">General Contractor</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>GC / Company Name</label>
-              <input type="text" value={form.gc_name} onChange={e => setForm(p => ({ ...p, gc_name: e.target.value }))}
-                placeholder="ABC Construction" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>GC Email</label>
-              <input type="email" value={form.gc_email} onChange={e => setForm(p => ({ ...p, gc_email: e.target.value }))}
-                placeholder="estimating@abc.com" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Contact Name</label>
-              <input type="text" value={form.gc_contact_name} onChange={e => setForm(p => ({ ...p, gc_contact_name: e.target.value }))}
-                placeholder="John Smith" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Contact Phone</label>
-              <input type="tel" value={form.gc_contact_phone} onChange={e => setForm(p => ({ ...p, gc_contact_phone: e.target.value }))}
-                placeholder="210-555-0100" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Submit To</label>
-              <input type="text" value={form.submit_to} onChange={e => setForm(p => ({ ...p, submit_to: e.target.value }))}
-                placeholder="email or portal" className={inputClass} />
-            </div>
+        <FormSection title="General Contractor">
+          <div>
+            <FieldLabel>GC / Company Name</FieldLabel>
+            <FieldInput value={form.gc_name} onChange={e => setForm(p => ({ ...p, gc_name: e.target.value }))} placeholder="ABC Construction" />
           </div>
-        </div>
+          <div>
+            <FieldLabel>GC Email</FieldLabel>
+            <FieldInput type="email" value={form.gc_email} onChange={e => setForm(p => ({ ...p, gc_email: e.target.value }))} placeholder="estimating@abc.com" />
+          </div>
+          <div>
+            <FieldLabel>Contact Name</FieldLabel>
+            <FieldInput value={form.gc_contact_name} onChange={e => setForm(p => ({ ...p, gc_contact_name: e.target.value }))} placeholder="John Smith" />
+          </div>
+          <div>
+            <FieldLabel>Contact Phone</FieldLabel>
+            <FieldInput type="tel" value={form.gc_contact_phone} onChange={e => setForm(p => ({ ...p, gc_contact_phone: e.target.value }))} placeholder="210-555-0100" />
+          </div>
+          <div>
+            <FieldLabel>Submit To</FieldLabel>
+            <FieldInput value={form.submit_to} onChange={e => setForm(p => ({ ...p, submit_to: e.target.value }))} placeholder="email or portal" />
+          </div>
+        </FormSection>
 
         {/* Deadline */}
-        <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
-          <h2 className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Bid Deadline</h2>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className={labelClass}>Due Date</label>
-              <input type="date" value={form.bid_due_date} onChange={e => setForm(p => ({ ...p, bid_due_date: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Due Time</label>
-              <input type="text" value={form.bid_due_time} onChange={e => setForm(p => ({ ...p, bid_due_time: e.target.value }))}
-                placeholder="2:00 PM CT" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Status</label>
-              <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className={inputClass}>
-                {BID_STATUSES.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
+        <FormSection title="Bid Deadline" cols={3}>
+          <div>
+            <FieldLabel>Due Date</FieldLabel>
+            <FieldInput type="date" value={form.bid_due_date} onChange={e => setForm(p => ({ ...p, bid_due_date: e.target.value }))} />
           </div>
-        </div>
+          <div>
+            <FieldLabel>Due Time</FieldLabel>
+            <FieldInput value={form.bid_due_time} onChange={e => setForm(p => ({ ...p, bid_due_time: e.target.value }))} placeholder="2:00 PM CT" />
+          </div>
+          <div>
+            <FieldLabel>Status</FieldLabel>
+            <FieldSelect value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+              {BID_STATUSES.map(s => <option key={s}>{s}</option>)}
+            </FieldSelect>
+          </div>
+        </FormSection>
 
         {/* Trades */}
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-xs font-bold text-[#1a3a5c] uppercase tracking-wider mb-3">Trades</h2>
+        <div className="card p-5">
+          <h2 className="card-title mb-3">Trades</h2>
           <div className="flex flex-wrap gap-2">
             {TRADES.map(t => (
-              <button key={t} type="button" onClick={() => toggle(t)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                  form.trades.includes(t)
-                    ? 'bg-[#1a3a5c] text-white border-[#1a3a5c]'
-                    : 'border-gray-200 text-gray-600 hover:border-[#1a3a5c]'
-                }`}>
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggle(t)}
+                className="text-[12px] font-semibold px-3 py-1.5 rounded border transition-colors"
+                style={form.trades.includes(t)
+                  ? { background: 'var(--navy)', color: 'white', borderColor: 'var(--navy)' }
+                  : { background: 'transparent', color: 'var(--text-2)', borderColor: 'var(--border)' }
+                }
+              >
                 {t}
               </button>
             ))}
@@ -214,25 +196,77 @@ export default function NewBidPage() {
         </div>
 
         {/* Notes */}
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <label className={labelClass}>Notes</label>
-          <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
-            rows={3} placeholder="Any additional details..."
-            className={inputClass + ' resize-none'} />
+        <div className="card p-5">
+          <FieldLabel>Notes</FieldLabel>
+          <FieldTextarea rows={3} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+            placeholder="Any additional details…" />
         </div>
 
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}
+        {error && (
+          <div
+            className="text-[13px] rounded px-3 py-2"
+            style={{ background: 'var(--bad-soft)', color: 'var(--bad)', border: '1px solid var(--bad-soft)' }}
+          >
+            {error}
+          </div>
+        )}
 
         <div className="flex gap-3">
-          <button type="submit" disabled={saving}
-            className="flex items-center gap-2 bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-6 py-2.5 rounded-lg text-sm transition-colors disabled:opacity-50">
+          <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-1.5">
             <Save size={14} /> {saving ? 'Saving…' : 'Save Bid'}
           </button>
-          <Link href="/bids" className="border border-gray-200 text-gray-600 font-semibold px-6 py-2.5 rounded-lg text-sm hover:border-[#1a3a5c] transition-colors">
-            Cancel
-          </Link>
+          <Link href="/bids" className="btn btn-ghost">Cancel</Link>
         </div>
       </form>
     </div>
+  );
+}
+
+function FormSection({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) {
+  return (
+    <div className="card p-5 space-y-4">
+      <h2 className="card-title">{title}</h2>
+      <div className={`grid grid-cols-${cols} gap-4`}>{children}</div>
+    </div>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <label className="label-mono block mb-1">{children}</label>;
+}
+
+function FieldInput({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      className={`w-full rounded border px-3 py-2 text-[13px] outline-none transition-colors ${className}`}
+      style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+      onFocus={e => (e.currentTarget.style.borderColor = 'var(--orange)')}
+      onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+      {...props}
+    />
+  );
+}
+
+function FieldSelect({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className="w-full rounded border px-3 py-2 text-[13px] outline-none transition-colors cursor-pointer"
+      style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+}
+
+function FieldTextarea({ className = '', ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      className={`w-full rounded border px-3 py-2 text-[13px] outline-none transition-colors resize-none ${className}`}
+      style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+      onFocus={e => (e.currentTarget.style.borderColor = 'var(--orange)')}
+      onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+      {...props}
+    />
   );
 }

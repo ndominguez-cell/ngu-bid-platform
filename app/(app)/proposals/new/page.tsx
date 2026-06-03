@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, Wand2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Wand2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 
 function NewProposalContent() {
@@ -24,10 +24,6 @@ function NewProposalContent() {
 
   useEffect(() => {
     if (!bidId) { setEstimates([]); return; }
-    fetch('/api/bids').then(r => r.json()).then(d => {
-      const bid = (d.data ?? []).find((b: any) => b.id === bidId);
-      // We'll fetch estimates via bid detail
-    });
     fetch(`/api/bids/${bidId}`).then(r => r.json()).then(d => {
       setEstimates(d.data?.estimates ?? []);
     });
@@ -56,32 +52,40 @@ function NewProposalContent() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-2xl mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <Loader2 size={48} className="text-[#1a3a5c] animate-spin mb-6" />
-        <h2 className="text-xl font-bold text-[#1a3a5c] mb-2">Drafting Proposal…</h2>
-        <p className="text-gray-500 text-sm text-center max-w-md">
+      <div className="mx-auto w-full max-w-2xl px-7 pb-20 pt-6 flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="relative mb-5">
+          <Loader2 size={40} className="animate-spin" style={{ color: 'var(--navy)' }} />
+          <Sparkles size={16} className="absolute -top-1 -right-1" style={{ color: 'var(--orange)' }} />
+        </div>
+        <h2 className="text-[18px] font-semibold mb-2" style={{ color: 'var(--text)' }}>Drafting Proposal…</h2>
+        <p className="text-[13px] text-center max-w-md" style={{ color: 'var(--text-muted)' }}>
           Claude is writing a professional bid proposal email based on the bid details and estimate. Takes about 15 seconds.
         </p>
       </div>
     );
   }
 
-  const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1a3a5c] transition-colors';
-  const labelClass = 'block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1';
-
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <Link href="/proposals" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1a3a5c] mb-4 transition-colors">
-        <ArrowLeft size={14} /> Back to Proposals
+    <div className="mx-auto w-full max-w-2xl px-7 pb-20 pt-6">
+      <Link href="/proposals" className="inline-flex items-center gap-1.5 text-[13px] mb-5 transition-colors" style={{ color: 'var(--text-muted)' }}>
+        <ArrowLeft size={13} /> Proposals
       </Link>
-      <h1 className="text-2xl font-bold text-[#1a3a5c] mb-1">Draft Proposal</h1>
-      <p className="text-gray-500 text-sm mb-6">Select a bid and Claude will write a professional proposal email</p>
+      <h1 className="text-[28px] font-medium leading-tight mb-1" style={{ color: 'var(--text)' }}>Draft Proposal</h1>
+      <p className="text-[13.5px] mb-6" style={{ color: 'var(--text-muted)' }}>
+        Select a bid and Claude will write a professional proposal email
+      </p>
 
       <form onSubmit={handleGenerate} className="space-y-5">
-        <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
+        <div className="card p-5 space-y-4">
           <div>
-            <label className={labelClass}>Bid *</label>
-            <select value={bidId} onChange={e => setBidId(e.target.value)} className={inputClass} required>
+            <label className="label-mono block mb-1">Bid *</label>
+            <select
+              value={bidId}
+              onChange={e => setBidId(e.target.value)}
+              required
+              className="w-full rounded border px-3 py-2 text-[13px] outline-none transition-colors cursor-pointer"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            >
               <option value="">— Select a bid —</option>
               {bids.map((b: any) => (
                 <option key={b.id} value={b.id}>{b.id} · {b.project_name}</option>
@@ -91,8 +95,13 @@ function NewProposalContent() {
 
           {estimates.length > 0 && (
             <div>
-              <label className={labelClass}>Estimate (optional — includes line item totals)</label>
-              <select value={estimateId} onChange={e => setEstimateId(e.target.value)} className={inputClass}>
+              <label className="label-mono block mb-1">Estimate (optional — includes line item totals)</label>
+              <select
+                value={estimateId}
+                onChange={e => setEstimateId(e.target.value)}
+                className="w-full rounded border px-3 py-2 text-[13px] outline-none transition-colors cursor-pointer"
+                style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+              >
                 <option value="">— No estimate (use TBD for amount) —</option>
                 {estimates.map((est: any) => (
                   <option key={est.id} value={est.id}>{est.name} — ${est.total_amount?.toLocaleString()}</option>
@@ -101,21 +110,38 @@ function NewProposalContent() {
             </div>
           )}
 
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
-            Claude will generate a professional email with: project scope, our bid total, key qualifications, and a signature block for Nick Dominguez at NGU Construction.
+          {/* AI context note */}
+          <div
+            className="rounded-lg p-3 text-[12px]"
+            style={{
+              background: 'linear-gradient(135deg, var(--info-soft) 0%, var(--navy-soft) 100%)',
+              border: '1px solid var(--border)',
+              color: 'var(--info)',
+            }}
+          >
+            <p className="font-semibold mb-0.5 flex items-center gap-1.5">
+              <Sparkles size={12} /> What Claude will generate
+            </p>
+            <p style={{ color: 'var(--text-2)' }}>
+              A professional proposal email with: project scope, our bid total, key qualifications, and a signature block for Nick Dominguez at NGU Construction.
+            </p>
           </div>
         </div>
 
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}
+        {error && (
+          <div
+            className="text-[13px] rounded px-3 py-2"
+            style={{ background: 'var(--bad-soft)', color: 'var(--bad)', border: '1px solid var(--bad-soft)' }}
+          >
+            {error}
+          </div>
+        )}
 
         <div className="flex gap-3">
-          <button type="submit"
-            className="flex items-center gap-2 bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-6 py-2.5 rounded-lg text-sm transition-colors">
+          <button type="submit" className="btn btn-accent flex items-center gap-1.5">
             <Wand2 size={14} /> Generate with AI
           </button>
-          <Link href="/proposals" className="border border-gray-200 text-gray-600 font-semibold px-6 py-2.5 rounded-lg text-sm hover:border-[#1a3a5c] transition-colors">
-            Cancel
-          </Link>
+          <Link href="/proposals" className="btn btn-ghost">Cancel</Link>
         </div>
       </form>
     </div>
@@ -125,8 +151,8 @@ function NewProposalContent() {
 export default function NewProposalPage() {
   return (
     <Suspense fallback={
-      <div className="p-6 flex items-center justify-center min-h-[40vh]">
-        <Loader2 size={32} className="text-[#1a3a5c] animate-spin" />
+      <div className="mx-auto w-full max-w-2xl px-7 pb-20 pt-6 flex items-center justify-center min-h-[40vh]">
+        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--navy)' }} />
       </div>
     }>
       <NewProposalContent />

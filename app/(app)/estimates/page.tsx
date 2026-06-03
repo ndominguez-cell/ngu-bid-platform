@@ -1,9 +1,17 @@
 import { createClient } from '@/lib/supabase/server';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
-import { Upload, Calculator } from 'lucide-react';
+import { Plus, Calculator } from 'lucide-react';
 
 export const revalidate = 0;
+
+const EST_STATUS: Record<string, { bg: string; color: string }> = {
+  Draft:       { bg: 'var(--surface-2)',  color: 'var(--text-muted)' },
+  'In Review': { bg: 'var(--info-soft)',  color: 'var(--info)' },
+  Approved:    { bg: 'var(--ok-soft)',    color: 'var(--ok)' },
+  Submitted:   { bg: 'var(--warn-soft)',  color: 'var(--warn)' },
+  Archived:    { bg: 'var(--surface-2)',  color: 'var(--text-subtle)' },
+};
 
 export default async function EstimatesPage() {
   const supabase = createClient();
@@ -13,68 +21,89 @@ export default async function EstimatesPage() {
     .order('created_at', { ascending: false });
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto w-full max-w-[1480px] px-7 pb-20 pt-6">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#1a3a5c]">Estimates</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Upload plans · AI takeoff · Build line items</p>
+          <h1 className="text-[28px] font-medium leading-tight" style={{ color: 'var(--text)' }}>Estimates</h1>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--text-muted)' }}>
+            Upload plans · AI takeoff · Build line items
+          </p>
         </div>
-        <Link href="/estimates/new" className="flex items-center gap-2 bg-[#1a3a5c] hover:bg-[#e87722] text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors">
-          <Upload size={15} /> Upload Plans
+        <Link href="/estimates/new" className="btn btn-accent btn-sm flex items-center gap-1.5">
+          <Plus size={13} /> New Estimate
         </Link>
       </div>
 
-      {/* Upload CTA if empty */}
+      {/* Empty state */}
       {(!estimates || estimates.length === 0) && (
-        <div className="bg-white rounded-2xl shadow-sm border-2 border-dashed border-gray-200 p-12 text-center mb-6">
-          <Calculator size={40} className="mx-auto text-gray-300 mb-4" />
-          <h2 className="text-lg font-bold text-gray-500 mb-2">No estimates yet</h2>
-          <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">
-            Upload plans or specs for a bid and Claude will analyze them to generate a takeoff and line-item estimate automatically.
+        <div
+          className="rounded-lg p-12 text-center mb-6"
+          style={{ border: '2px dashed var(--border)' }}
+        >
+          <Calculator size={36} className="mx-auto mb-4" style={{ color: 'var(--border-strong)' }} />
+          <h2 className="text-[15px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>No estimates yet</h2>
+          <p className="text-[13px] mb-6 max-w-sm mx-auto" style={{ color: 'var(--text-subtle)' }}>
+            Upload plans or specs for a bid and Claude will analyze them to generate a takeoff and line-item estimate.
           </p>
-          <Link href="/estimates/new" className="inline-flex items-center gap-2 bg-[#1a3a5c] text-white font-bold px-6 py-3 rounded-xl hover:bg-[#e87722] transition-colors">
-            <Upload size={16} /> Upload Your First Plans
+          <Link href="/estimates/new" className="btn btn-primary flex items-center gap-1.5 inline-flex">
+            <Plus size={14} /> Upload Your First Plans
           </Link>
         </div>
       )}
 
-      {/* Estimates list */}
+      {/* Table */}
       {estimates && estimates.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-hidden p-0">
+          <table className="w-full text-[13px]">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-4 py-3 text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Estimate</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Project</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Total</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-[#1a3a5c] uppercase tracking-wider">Created</th>
+              <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                {['Estimate', 'Project', 'Total', 'Status', 'Created'].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 label-mono">{h}</th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {estimates.map((est: any) => (
-                <tr key={est.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link href={`/estimates/${est.id}`} className="font-semibold text-[#1a3a5c] hover:text-[#e87722] transition-colors">
-                      {est.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">
-                    {est.bids?.project_name || '—'}
-                    {est.bids?.city && <span className="text-gray-400"> · {est.bids.city}, {est.bids.state}</span>}
-                  </td>
-                  <td className="px-4 py-3 font-bold text-[#1a3a5c]">{formatCurrency(est.total_amount)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      est.status === 'Approved' ? 'bg-green-100 text-green-700' :
-                      est.status === 'Submitted' ? 'bg-yellow-100 text-yellow-700' :
-                      est.status === 'In Review' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>{est.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">{formatDate(est.created_at)}</td>
-                </tr>
-              ))}
+            <tbody>
+              {estimates.map((est: any) => {
+                const s = EST_STATUS[est.status] ?? EST_STATUS.Draft;
+                return (
+                  <tr
+                    key={est.id}
+                    className="transition-colors hover:bg-[var(--surface-2)]"
+                    style={{ borderBottom: '1px solid var(--border)' }}
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/estimates/${est.id}`}
+                        className="font-semibold transition-colors hover:text-[var(--orange)]"
+                        style={{ color: 'var(--navy)' }}
+                      >
+                        {est.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-[12px]" style={{ color: 'var(--text-2)' }}>
+                      {est.bids?.project_name || '—'}
+                      {est.bids?.city && (
+                        <span style={{ color: 'var(--text-subtle)' }}> · {est.bids.city}, {est.bids.state}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: 'var(--navy)' }}>
+                      {formatCurrency(est.total_amount)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded"
+                        style={{ background: s.bg, color: s.color }}
+                      >
+                        {est.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[12px]" style={{ color: 'var(--text-subtle)' }}>
+                      {formatDate(est.created_at)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
