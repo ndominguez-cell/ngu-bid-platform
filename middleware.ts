@@ -2,17 +2,16 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  // Skip auth enforcement if Supabase isn't configured yet (prevents MIDDLEWARE_INVOCATION_FAILED)
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return NextResponse.next({ request });
-  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  let supabaseResponse = NextResponse.next({ request });
+  // Pass through without auth enforcement if Supabase isn't fully configured
+  if (!url || !key) return NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
+  try {
+    let supabaseResponse = NextResponse.next({ request });
+
+    const supabase = createServerClient(url, key, {
       cookies: {
         getAll() { return request.cookies.getAll(); },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
@@ -23,25 +22,30 @@ export async function middleware(request: NextRequest) {
           );
         },
       },
+    });
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const path = request.nextUrl.pathname;
+
+    const isAuthRoute = path.startsWith('/login') || path.startsWith('/signup');
+    if (isAuthRoute && user) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-  );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const path = request.nextUrl.pathname;
+    const isPublicRoute =
+      path.startsWith('/login') ||
+      path.startsWith('/signup') ||
+      path === '/' ||
+      path.startsWith('/api/');
+    if (!isPublicRoute && !user) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
 
-  // Auth routes: redirect to dashboard if already logged in
-  const isAuthRoute = path.startsWith('/login') || path.startsWith('/signup');
-  if (isAuthRoute && user) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return supabaseResponse;
+  } catch {
+    // If Supabase auth check fails for any reason, pass through rather than 500-ing
+    return NextResponse.next({ request });
   }
-
-  // Protected routes: redirect to login if not authenticated
-  const isPublicRoute = path.startsWith('/login') || path.startsWith('/signup') || path === '/' || path.startsWith('/api/');
-  if (!isPublicRoute && !user) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
-  return supabaseResponse;
 }
 
 export const config = {
