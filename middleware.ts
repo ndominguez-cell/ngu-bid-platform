@@ -1,39 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-// Check for a Supabase session cookie without importing @supabase/ssr,
-// which pulls in Node.js globals (__dirname) incompatible with Edge runtime.
-// Full token validation still happens in server components via createClient().
-const SUPABASE_REF = 'rsnbsafzruenrefdlntj';
-
-function hasSession(request: NextRequest): boolean {
-  // @supabase/ssr stores the session as sb-{ref}-auth-token
-  const token = request.cookies.get(`sb-${SUPABASE_REF}-auth-token`);
-  return !!token?.value;
-}
-
-export function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-  const loggedIn = hasSession(request);
-
-  // Redirect logged-in users away from auth pages
-  const isAuthRoute = path.startsWith('/login') || path.startsWith('/signup');
-  if (isAuthRoute && loggedIn) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
-  // Redirect unauthenticated users to login
-  const isPublicRoute =
-    path.startsWith('/login') ||
-    path.startsWith('/signup') ||
-    path === '/' ||
-    path.startsWith('/api/');
-  if (!isPublicRoute && !loggedIn) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
-  return NextResponse.next({ request });
+// Auth protection is handled server-side in app/(app)/layout.tsx via
+// supabase.auth.getUser() — no middleware needed.
+//
+// This file is intentionally a no-op. The previous approach of checking a
+// Supabase session cookie here caused MIDDLEWARE_INVOCATION_FAILED (500 on
+// every request) due to a Next.js 14 / Vercel Edge runtime incompatibility
+// where the compiled middleware bundle references __dirname, which is
+// undefined in V8 isolates.
+//
+// With matcher: [], this file is never invoked and produces no Edge bundle.
+export function middleware(_request: NextRequest) {
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: [],
 };
