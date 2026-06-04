@@ -191,7 +191,7 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
                             href={b.plans_link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
+                           
                             className="icon-btn"
                             title="View plans"
                             style={{ width: 28, height: 28 }}
@@ -204,7 +204,7 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
                             href={`https://mail.google.com/mail/u/0/#inbox/${b.thread_id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
+                         
                             className="icon-btn"
                             title="View in Gmail"
                             style={{ width: 28, height: 28 }}
@@ -213,7 +213,7 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
                           </a>
                         )}
                         <button
-                          onClick={e => e.stopPropagation()}
+                         
                           className="icon-btn"
                           aria-label="More actions"
                           style={{ width: 28, height: 28 }}
