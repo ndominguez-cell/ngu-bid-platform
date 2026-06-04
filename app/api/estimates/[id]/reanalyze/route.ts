@@ -6,6 +6,32 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Static system prompt — cached on first call, ~90% cheaper on subsequent calls.
+const SYSTEM_PROMPT = `You are an expert construction estimator for NGU Construction, a Texas site work and concrete subcontractor.
+
+When additional plan files are uploaded for an existing estimate, analyze the new documents and generate ADDITIONAL or UPDATED line items only — do not repeat items already in the estimate.
+
+NGU Construction trades: Concrete, Earthwork, Asphalt/Paving, Drainage, Utilities, Masonry, Structural Steel, Striping, Sitework.
+
+Always return ONLY a valid JSON object with this exact shape:
+{
+  "ai_summary": "Brief description of what the new documents added or clarified",
+  "line_items": [
+    {
+      "trade": "Concrete",
+      "description": "Additional scope from new plans",
+      "qty": 1000,
+      "unit": "SF",
+      "unit_price": 8.50,
+      "total": 8500
+    }
+  ],
+  "markup_pct": 10,
+  "notes": "Any new assumptions or exclusions"
+}
+
+Use current Texas market rates (2025-2026). Do not include markdown, explanation, or any text outside the JSON object.`;
+
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServiceClient();
 
@@ -36,38 +62,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 3000,
-      messages: [{
-        role: 'user',
-        content: `You are an expert construction estimator for NGU Construction, a Texas site work and concrete subcontractor.
-
-Additional plan files have been uploaded for an existing estimate. Analyze the new documents and generate ADDITIONAL or UPDATED line items.
-
-New files:
-${fileDescriptions}${existingSummary}
-
-Existing line item count: ${existingItems.length}
-
-NGU Construction trades: Concrete, Earthwork, Asphalt/Paving, Drainage, Utilities, Masonry, Structural Steel, Striping, Sitework.
-
-Return ONLY a valid JSON object:
-{
-  "ai_summary": "Brief description of what the new documents added or clarified",
-  "line_items": [
-    {
-      "trade": "Concrete",
-      "description": "Additional scope from new plans",
-      "qty": 1000,
-      "unit": "SF",
-      "unit_price": 8.50,
-      "total": 8500
-    }
-  ],
-  "markup_pct": 10,
-  "notes": "Any new assumptions or exclusions"
-}
-
-Only include NEW line items not already represented. Use current Texas market rates (2025-2026).`,
-      }],
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [
+        {
+          role: 'user',
+          content: `New files uploaded:\n${fileDescriptions}${existingSummary}\n\nExisting line item count: ${existingItems.length}\n\nGenerate only NEW line items not already represented.`,
+        },
+      ],
     });
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
