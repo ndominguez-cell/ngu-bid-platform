@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
@@ -33,6 +34,9 @@ Always return ONLY a valid JSON object with this exact shape:
 Use current Texas market rates (2025-2026). Do not include markdown, explanation, or any text outside the JSON object.`;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
 
   try {

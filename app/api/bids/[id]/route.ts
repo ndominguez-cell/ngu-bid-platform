@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('bids')
@@ -13,6 +17,9 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
   const body = await req.json();
   const { data, error } = await supabase
@@ -26,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
   const { error } = await supabase.from('bids').delete().eq('id', params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
