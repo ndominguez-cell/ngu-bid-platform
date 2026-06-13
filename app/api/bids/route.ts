@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 
 export async function GET() {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('bids')
@@ -12,6 +16,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
   const body = await req.json();
   const { data, error } = await supabase.from('bids').insert(body).select().single();

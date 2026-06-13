@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('estimates')

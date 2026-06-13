@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
@@ -7,6 +8,9 @@ export const maxDuration = 60;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   const supabase = createServiceClient();
 
   try {
