@@ -3,6 +3,8 @@
 > **Audience:** anyone planning the Stage 2 "find the template" pass from [`00_SCOPE_AND_GOALS.md`](./00_SCOPE_AND_GOALS.md).
 > **Author:** Claude (Cowork), at Nick Dominguez's direction, 2026-05-27.
 > **Status:** first-pass inventory of what's NGU-specific in the current code. Not a refactor plan, just a map.
+>
+> **Update 2026-06-13:** the *tenancy model* question this note implies (how do other tenants coexist?) now has a recommendation — keep the pooled `workspace_id` + RLS model, not project-per-company — and a concrete first non-construction vertical (a boutique) to test the "generic chassis + per-industry domain pack" structure. See [`10_TENANCY_DECISION_AND_BOUTIQUE_VERTICAL_2026-06-13.md`](./10_TENANCY_DECISION_AND_BOUTIQUE_VERTICAL_2026-06-13.md).
 
 ---
 
