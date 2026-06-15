@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import { getValidAccessToken, gmailFetch } from '@/lib/gmail';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -8,9 +9,10 @@ export const maxDuration = 60;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+  const user = auth.user;
+  const workspaceId = auth.workspaceId;
 
   try {
     const accessToken = await getValidAccessToken(user.id);
@@ -48,6 +50,7 @@ export async function POST(req: NextRequest) {
         .from('conversations')
         .select('id')
         .eq('gmail_thread_id', threadId)
+        .eq('workspace_id', workspaceId)
         .single();
       if (existing) continue;
 
@@ -91,7 +94,10 @@ company_type must be one of: GC, Owner, Architect, Engineer, Subcontractor, Othe
       if (contactInfo.company_name) {
         const { data: company } = await serviceClient
           .from('companies')
-          .upsert({ name: contactInfo.company_name, type: contactInfo.company_type ?? 'GC' }, { onConflict: 'name' })
+          .upsert(
+            { workspace_id: workspaceId, name: contactInfo.company_name, type: contactInfo.company_type ?? 'GC' },
+            { onConflict: 'workspace_id,name' }
+          )
           .select('id')
           .single();
         companyId = company?.id ?? null;
@@ -102,6 +108,7 @@ company_type must be one of: GC, Owner, Architect, Engineer, Subcontractor, Othe
         const { data: contact } = await serviceClient
           .from('contacts')
           .upsert({
+            workspace_id: workspaceId,
             first_name: contactInfo.first_name,
             last_name: contactInfo.last_name,
             email: contactInfo.email,
@@ -109,7 +116,7 @@ company_type must be one of: GC, Owner, Architect, Engineer, Subcontractor, Othe
             title: contactInfo.title,
             company_id: companyId,
             source: 'gmail',
-          }, { onConflict: 'email' })
+          }, { onConflict: 'workspace_id,email' })
           .select('id')
           .single();
         contactId = contact?.id ?? null;
@@ -118,6 +125,7 @@ company_type must be one of: GC, Owner, Architect, Engineer, Subcontractor, Othe
 
       // Save conversation record
       await serviceClient.from('conversations').insert({
+        workspace_id: workspaceId,
         contact_id: contactId,
         gmail_thread_id: threadId,
         subject,

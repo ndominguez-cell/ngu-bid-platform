@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import { getValidAccessToken, gmailFetch, buildMimeMessage } from '@/lib/gmail';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+  const user = auth.user;
 
   const serviceClient = createServiceClient();
 
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .from('proposals')
     .select('*, bids(gc_email, gc_name, project_name)')
     .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
     .single();
 
   if (propErr || !proposal) return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
@@ -50,9 +52,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       sent_at: now,
       sent_by: user.id,
       gmail_thread_id: threadId,
-    }).eq('id', params.id);
+    }).eq('id', params.id).eq('workspace_id', auth.workspaceId);
 
     await serviceClient.from('conversations').insert({
+      workspace_id: auth.workspaceId,
       bid_id: proposal.bid_id,
       gmail_thread_id: threadId,
       subject: proposal.subject,

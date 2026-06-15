@@ -17,6 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .from('estimates')
     .update({ line_items, markup_pct: markup, status, notes, total_amount })
     .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
     .select()
     .single();
 

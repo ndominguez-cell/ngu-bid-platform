@@ -51,6 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('estimates')
       .select('*')
       .eq('id', params.id)
+      .eq('workspace_id', auth.workspaceId)
       .single();
 
     if (fetchErr || !existing) {
@@ -112,6 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         notes: combinedNotes || null,
       })
       .eq('id', params.id)
+      .eq('workspace_id', auth.workspaceId)
       .select()
       .single();
 
@@ -119,6 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     for (let i = 0; i < storage_paths.length; i++) {
       await supabase.from('documents').insert({
+        workspace_id: auth.workspaceId,
         bid_id: existing.bid_id || null,
         estimate_id: params.id,
         name: file_names[i] ?? storage_paths[i].split('/').pop(),

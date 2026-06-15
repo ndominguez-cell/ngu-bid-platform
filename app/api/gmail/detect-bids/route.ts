@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import { getValidAccessToken, gmailFetch } from '@/lib/gmail';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -34,12 +35,13 @@ function extractBody(payload: {
 }
 
 // Generate next bid ID: BID-YYYY-NNN
-async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>): Promise<string> {
+async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>, workspaceId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `BID-${year}-`;
   const { data } = await serviceClient
     .from('bids')
     .select('id')
+    .eq('workspace_id', workspaceId)
     .like('id', `${prefix}%`)
     .order('id', { ascending: false })
     .limit(1);
@@ -50,9 +52,10 @@ async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>):
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+  const user = auth.user;
+  const workspaceId = auth.workspaceId;
 
   try {
     const accessToken = await getValidAccessToken(user.id);
@@ -89,6 +92,7 @@ export async function POST(req: NextRequest) {
         .from('bids')
         .select('id')
         .eq('thread_id', threadId)
+        .eq('workspace_id', workspaceId)
         .single();
       if (existingBid) { skipped++; continue; }
 
@@ -139,10 +143,11 @@ Return ONLY the JSON object, no other text.`;
 
       if (!bidData.is_bid) { skipped++; continue; }
 
-      const bidId = await nextBidId(serviceClient);
+      const bidId = await nextBidId(serviceClient, workspaceId);
       const emailDate = new Date(internalDate).toISOString().split('T')[0];
 
       await serviceClient.from('bids').insert({
+        workspace_id: workspaceId,
         id: bidId,
         thread_id: threadId,
         email_received: emailDate,
@@ -165,6 +170,7 @@ Return ONLY the JSON object, no other text.`;
 
       // Also save the email as a conversation record
       await serviceClient.from('conversations').insert({
+        workspace_id: workspaceId,
         bid_id: bidId,
         gmail_thread_id: threadId,
         subject,

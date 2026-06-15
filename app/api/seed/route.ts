@@ -55,8 +55,24 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Seed data belongs to the NGU Construction workspace (workspace #1, created
+  // by the tenant_scoping migration). Resolve it so every seeded bid is scoped.
+  const { data: ws } = await supabase
+    .from('workspaces')
+    .select('id')
+    .eq('name', 'NGU Construction')
+    .limit(1)
+    .maybeSingle();
+  if (!ws) {
+    return NextResponse.json(
+      { error: 'No "NGU Construction" workspace found — run the tenant_scoping migration first.' },
+      { status: 400 }
+    );
+  }
+
   const mapped = BIDS.map(b => ({
     ...b,
+    workspace_id: ws.id,
     state: b.state ?? 'TX',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
