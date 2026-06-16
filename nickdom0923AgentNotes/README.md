@@ -46,10 +46,16 @@ Same convention as the sibling notes folder, so any agent that has worked in eit
 | [`14_MIDDLEWARE_DECISION_2026-06-15.md`](./14_MIDDLEWARE_DECISION_2026-06-15.md) | Claude | Why `middleware.ts` is intentionally absent — don't restore it without a green Vercel preview deploy first. | Read before touching middleware / Edge. |
 | [`15_PARTNER_SUPABASE_HANDOFF_2026-06-15.md`](./15_PARTNER_SUPABASE_HANDOFF_2026-06-15.md) | Nick + Claude | Self-contained handoff for the partner (who holds Supabase access) to run the A3 migrations safely — including the blocker: don't enroll polluted `profiles` as workspace members. | Read before running A3 migrations on the live project. |
 | [`16_STACK_DECISIONS_AND_COSTS_2026-06-16.md`](./16_STACK_DECISIONS_AND_COSTS_2026-06-16.md) | Nick + Claude | Checks the viral "$21/mo stack" against ours: skip Clerk (keep Supabase Auth) and Pinecone (use `pgvector`), add Resend now, real cost ~$65/mo. Recommendation for partner discussion. | Read when choosing/adding infra or pricing a deployment. |
+| [`17_TIER1_CHASSIS_HARDENING_PLAN_2026-06-16.md`](./17_TIER1_CHASSIS_HARDENING_PLAN_2026-06-16.md) | Codex | The Tier-1 hardening plan with real diffs + SQL + rollout: unify role authority on `workspace_members.role`, add an invite flow (table/endpoints/Resend), redesign bid IDs (UUID PK + per-workspace number), enforce cross-workspace FK integrity, and make `requireUser()` typed + 500-on-error. | Read after the A3 merge, before building the next layer. |
+| [`18_MERGE_RUNBOOK_2026-06-16.md`](./18_MERGE_RUNBOOK_2026-06-16.md) | Claude | **Supersedes note 15's deploy ordering.** Why a code-first merge 403s the live site, and the corrected expand→deploy→contract sequence. Two-person op: Nick=Vercel, partner=Supabase. | Read **before merging A3**. |
+| [`19_PROJECT_PRIMER_AND_TEACH_BACK_2026-06-16.md`](./19_PROJECT_PRIMER_AND_TEACH_BACK_2026-06-16.md) | Claude | One-page mental model of the whole project (the four nouns, the service-role wrinkle, the notes as a story, where we go next). Saved from a teach-the-session debrief. | Read **first** if you're new to the repo. |
+| [`20_TENANT_ISOLATION_TEST_SUITE_2026-06-16.md`](./20_TENANT_ISOLATION_TEST_SUITE_2026-06-16.md) | Codex | Handoff for the tenant-isolation test suite + CI (`tests/`, `.github/workflows/`). Asserts cross-tenant access is blocked at both the API and RLS layers. Deliberately encodes the known failures from notes 11/17 — they go green as the hardening lands. | Read when wiring CI or verifying isolation. |
 | [`teach-the-session.md`](./teach-the-session.md) | Claude | Reusable teaching workflow — after a change, make sure Nick + the partner understand it (walk the diff, restate, quiz, leave a note). A working asset, not a numbered note. | Use at the end of real-logic sessions. |
+| [`PARTNER_MERGE_INSTRUCTIONS_2026-06-16.md`](./PARTNER_MERGE_INSTRUCTIONS_2026-06-16.md) | Claude (for the partner) | Plain-language, action-oriented merge instructions for the partner (who holds Supabase) and his agents: the prerequisites, the exact Supabase steps, the Nick-coordination, success checks, and rollback. | Read when the partner is ready to run the A3 migration + merge. |
 
 ## Reading order if you only have 15 minutes
 
+0. **New to the repo? Start with [`19_PROJECT_PRIMER_AND_TEACH_BACK_2026-06-16.md`](./19_PROJECT_PRIMER_AND_TEACH_BACK_2026-06-16.md)** — the one-page mental model. Then come back here.
 1. [`00_SCOPE_AND_GOALS.md`](./00_SCOPE_AND_GOALS.md) — the project frame and Nick's growth thesis.
 2. [`02_TENANT_ISOLATION_BUG.md`](./02_TENANT_ISOLATION_BUG.md) §1 (observation) + §3 (fix sketch), then the new §0 cross-reference.
 3. [`04_CURSOR_DEBUG_FINDINGS.md`](./04_CURSOR_DEBUG_FINDINGS.md) §1 (public API exposure) and [`05_CURSOR_SECOND_PASS_AND_FORWARD_IDEAS.md`](./05_CURSOR_SECOND_PASS_AND_FORWARD_IDEAS.md) §A.1 (self-role escalation).
@@ -68,4 +74,4 @@ If you're an AI assistant on the partner's side and you'd like the broader conte
 
 ---
 
-*Folder created 2026-05-27 by nickdom0923 via Claude (Cowork). Index table refreshed 2026-06-16 — now covers notes `08`–`16` plus `teach-the-session.md`.*
+*Folder created 2026-05-27 by nickdom0923 via Claude (Cowork). Index table refreshed 2026-06-16 — now covers notes `00`–`20`, `teach-the-session.md`, and `PARTNER_MERGE_INSTRUCTIONS_2026-06-16.md`.*
