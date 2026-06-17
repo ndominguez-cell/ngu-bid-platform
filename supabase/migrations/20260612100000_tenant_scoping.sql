@@ -85,10 +85,12 @@ begin
   update proposals     set workspace_id = ws where workspace_id is null;
   update conversations set workspace_id = ws where workspace_id is null;
 
-  -- All existing users become members of the NGU workspace,
-  -- carrying over their profile role.
-  insert into workspace_members (workspace_id, user_id, role)
-  select ws, id, coalesce(role, 'estimator') from profiles
+  -- Explicit NGU staff allowlist. Source: partner audit on 2026-06-17.
+  -- DO NOT replace this with a blanket "select * from profiles" enroll --
+  -- self-signup has been public, so profiles is not a clean staff list.
+  insert into workspace_members (workspace_id, user_id, role) values
+    (ws, '1e60fbd9-d928-41a4-9217-76a435836921'::uuid, 'owner'),
+    (ws, '9d463d95-cf19-4c1b-94f0-28fd7f3c926f'::uuid, 'estimator')
   on conflict (workspace_id, user_id) do nothing;
 end $$;
 
