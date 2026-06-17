@@ -89,6 +89,7 @@ Use current Texas market rates (2025-2026). Only include trades NGU performs. Ba
     const { data: estimate, error: estError } = await supabase
       .from('estimates')
       .insert({
+        workspace_id: auth.workspaceId,
         bid_id: bid_id || null,
         name: name || `Estimate – ${new Date().toLocaleDateString()}`,
         status: 'Draft',
@@ -105,6 +106,7 @@ Use current Texas market rates (2025-2026). Only include trades NGU performs. Ba
 
     for (let i = 0; i < (storage_paths as string[]).length; i++) {
       await supabase.from('documents').insert({
+        workspace_id: auth.workspaceId,
         bid_id: bid_id || null,
         estimate_id: estimate.id,
         name: (file_names as string[])[i] ?? (storage_paths[i] as string).split('/').pop(),

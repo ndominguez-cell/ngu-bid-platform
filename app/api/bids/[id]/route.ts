@@ -11,6 +11,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     .from('bids')
     .select('*, estimates(*), proposals(*)')
     .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
   return NextResponse.json({ data });
@@ -24,8 +25,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json();
   const { data, error } = await supabase
     .from('bids')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...body, workspace_id: auth.workspaceId, updated_at: new Date().toISOString() })
     .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -37,7 +39,11 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   if (auth.error) return auth.error;
 
   const supabase = createServiceClient();
-  const { error } = await supabase.from('bids').delete().eq('id', params.id);
+  const { error } = await supabase
+    .from('bids')
+    .delete()
+    .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ success: true });
 }

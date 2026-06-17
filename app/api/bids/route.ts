@@ -10,6 +10,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('bids')
     .select('*')
+    .eq('workspace_id', auth.workspaceId)
     .order('bid_due_date', { ascending: true, nullsFirst: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
@@ -21,7 +22,12 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
   const body = await req.json();
-  const { data, error } = await supabase.from('bids').insert(body).select().single();
+  // Force the caller's workspace — never trust a workspace_id from the request body.
+  const { data, error } = await supabase
+    .from('bids')
+    .insert({ ...body, workspace_id: auth.workspaceId })
+    .select()
+    .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ data }, { status: 201 });
 }

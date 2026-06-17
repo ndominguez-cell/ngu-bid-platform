@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 300;
@@ -68,15 +69,15 @@ After searching, respond with ONLY a valid JSON object (no markdown, no commenta
 }`;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
   const serviceClient = createServiceClient();
   const { data: bid, error: bidError } = await serviceClient
     .from('bids')
     .select('*')
     .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
     .single();
 
   if (bidError || !bid) return NextResponse.json({ error: 'Bid not found' }, { status: 404 });
@@ -162,7 +163,8 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
       await serviceClient
         .from('bids')
         .update({ plans_link: report.plans_url, updated_at: new Date().toISOString() })
-        .eq('id', params.id);
+        .eq('id', params.id)
+        .eq('workspace_id', auth.workspaceId);
       report.auto_saved = true;
     }
 

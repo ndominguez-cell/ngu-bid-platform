@@ -33,12 +33,12 @@ export async function POST(req: NextRequest) {
 
   if (!bid_id) return NextResponse.json({ error: 'bid_id required' }, { status: 400 });
 
-  const { data: bid } = await supabase.from('bids').select('*').eq('id', bid_id).single();
+  const { data: bid } = await supabase.from('bids').select('*').eq('id', bid_id).eq('workspace_id', auth.workspaceId).single();
   if (!bid) return NextResponse.json({ error: 'Bid not found' }, { status: 404 });
 
   let estimate = null;
   if (estimate_id) {
-    const { data } = await supabase.from('estimates').select('*').eq('id', estimate_id).single();
+    const { data } = await supabase.from('estimates').select('*').eq('id', estimate_id).eq('workspace_id', auth.workspaceId).single();
     estimate = data;
   }
 
@@ -95,6 +95,7 @@ Submit To: ${bid.submit_to || bid.gc_email || ''}${
     const { data: proposal, error } = await supabase
       .from('proposals')
       .insert({
+        workspace_id: auth.workspaceId,
         bid_id,
         estimate_id: estimate_id || null,
         subject,

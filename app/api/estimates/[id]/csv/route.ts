@@ -11,6 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .from('estimates')
     .select('name, line_items, markup_pct, total_amount')
     .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
     .single();
 
   if (error || !data) return new NextResponse('Not found', { status: 404 });
