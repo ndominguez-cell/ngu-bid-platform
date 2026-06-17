@@ -12,6 +12,7 @@ import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
 import { SourcePill } from '@/components/ui/SourcePill';
 import { AIPill } from '@/components/ui/AIPill';
 import BidStatusUpdater from './BidStatusUpdater';
+import BidOutcomePanel from './BidOutcomePanel';
 import FindPlansButton from './FindPlansButton';
 
 export const revalidate = 0;
@@ -197,6 +198,26 @@ export default async function BidDetailPage({ params }: { params: { id: string }
                 size={16}
               />
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Outcome capture — closes the win/loss feedback loop */}
+      <div className="mt-[18px] grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="card lg:col-span-12">
+          <div className="card-head">
+            <div className="card-title">Record outcome</div>
+            <span className="label-mono">closes the win/loss feedback loop</span>
+          </div>
+          <div className="p-[18px]">
+            <BidOutcomePanel
+              bidId={bid.id}
+              status={bid.status}
+              ourBidAmount={bid.our_bid_amount}
+              awardedAmount={bid.awarded_amount}
+              lossReason={bid.loss_reason}
+              decidedAt={bid.decided_at}
+            />
           </div>
         </div>
       </div>

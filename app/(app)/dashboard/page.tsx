@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth';
 import { getDaysLeft, formatDate, formatCurrency } from '@/lib/utils';
-import type { Bid } from '@/lib/types';
+import type { Bid, DashboardStats } from '@/lib/types';
 import { Plus, Mail, ArrowRight, Filter } from 'lucide-react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
@@ -24,12 +25,22 @@ interface ActivityRow {
 }
 
 async function getData() {
-  const supabase = createClient();
+  const auth = await requireUser();
+  if (auth.error || !auth.workspaceId) {
+    return { bids: [] as Bid[], activities: [] as ActivityRow[] };
+  }
+
+  const supabase = createServiceClient();
   const [{ data: bidsData }, { data: activityData }] = await Promise.all([
-    supabase.from('bids').select('*').order('bid_due_date', { ascending: true, nullsFirst: false }),
+    supabase
+      .from('bids')
+      .select('*')
+      .eq('workspace_id', auth.workspaceId)
+      .order('bid_due_date', { ascending: true, nullsFirst: false }),
     supabase
       .from('bid_activity')
       .select('id, type, content, metadata, created_at, bid_id, bids(project_name)')
+      .eq('workspace_id', auth.workspaceId)
       .order('created_at', { ascending: false })
       .limit(12),
   ]);
@@ -48,9 +59,19 @@ export default async function DashboardPage() {
   const submitted = bids.filter(b => b.status === 'Submitted');
   const won       = bids.filter(b => b.status === 'Won');
   const lost      = bids.filter(b => b.status === 'Lost');
-  const winRate   = won.length + lost.length > 0 ? won.length / (won.length + lost.length) : 0;
+  const decided   = bids.filter(b => b.status === 'Won' || b.status === 'Lost');
 
   const inFlight = active.reduce((sum, b) => sum + (b.our_bid_amount ?? 0), 0);
+  const totalBidValue = bids.reduce((sum, b) => sum + (b.our_bid_amount ?? 0), 0);
+  const stats: DashboardStats = {
+    total: bids.length,
+    urgent: urgent.length,
+    this_week: thisWeek.length,
+    submitted: submitted.length,
+    won: won.length,
+    total_bid_value: totalBidValue,
+    win_rate: decided.length > 0 ? won.length / decided.length : 0,
+  };
 
   const upcoming = active
     .filter(b => b.bid_due_date)
@@ -98,30 +119,29 @@ export default async function DashboardPage() {
       <div className="mb-[18px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPI
           label="Total Bids"
-          value={bids.length}
+          value={stats.total}
           sub="All-time"
           delta="+3 wk"
-          spark={[18, 21, 23, 26, 28, bids.length]}
+          spark={[18, 21, 23, 26, 28, stats.total]}
         />
         <KPI
           label="Due ≤ 3 Days"
-          value={urgent.length}
+          value={stats.urgent}
           sub="Includes today"
-          delta={urgent.length > 0 ? 'Action' : undefined}
+          delta={stats.urgent > 0 ? 'Action' : undefined}
           deltaTone="down"
-          urgent={urgent.length > 0}
+          urgent={stats.urgent > 0}
         />
         <KPI
           label="Due This Week"
-          value={thisWeek.length}
-          sub={`${submitted.length} already submitted`}
+          value={stats.this_week}
+          sub={`${stats.submitted} already submitted`}
         />
         <KPI
-          label="Win Rate (TTM)"
-          value={`${Math.round(winRate * 100)}%`}
-          sub={`${won.length} wins · ${lost.length} losses`}
-          delta="+4 pts"
-          spark={[30, 34, 38, 36, 42, Math.round(winRate * 100)]}
+          label="Win Rate"
+          value={`${Math.round(stats.win_rate * 100)}%`}
+          sub={`${stats.won} wins · ${lost.length} losses`}
+          spark={[30, 34, 38, 36, 42, Math.round(stats.win_rate * 100)]}
           sparkColor="var(--ok)"
         />
       </div>

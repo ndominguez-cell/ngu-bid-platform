@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth';
+import type { EstimateLineItem } from '@/lib/types';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const tenantIsolationTestMode =
+  process.env.TENANT_ISOLATION_TEST_MODE === '1' && process.env.NODE_ENV !== 'production';
 
 // Static system prompt — cached on first call, ~90% cheaper on subsequent calls.
 const SYSTEM_PROMPT = `You are writing professional bid proposal emails for NGU Construction, a Texas site work and concrete subcontractor.
@@ -60,34 +64,35 @@ Our Bid Total: ${totalStr}
 Bid Due Date: ${dueStr}
 Submit To: ${bid.submit_to || bid.gc_email || ''}${
     estimate
-      ? `\n\nLine items summary:\n${(estimate.line_items || [])
+      ? `\n\nLine items summary:\n${((estimate.line_items || []) as EstimateLineItem[])
           .slice(0, 5)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((li: any) => `- ${li.trade}: ${li.description} — $${li.total?.toLocaleString()}`)
+          .map(li => `- ${li.trade}: ${li.description} — $${li.total?.toLocaleString()}`)
           .join('\n')}`
       : ''
   }`;
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: `Write a bid proposal email for the following project:\n\n${projectContext}`,
-        },
-      ],
-    });
-
-    const fullText = response.content[0].type === 'text' ? response.content[0].text : '';
+    let fullText = 'SUBJECT: Tenant Isolation Test Proposal\n\nDeterministic proposal body.';
+    if (!tenantIsolationTestMode) {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system: [
+          {
+            type: 'text',
+            text: SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        messages: [
+          {
+            role: 'user',
+            content: `Write a bid proposal email for the following project:\n\n${projectContext}`,
+          },
+        ],
+      });
+      fullText = response.content[0].type === 'text' ? response.content[0].text : '';
+    }
     const subjectMatch = fullText.match(/SUBJECT:\s*(.+)/);
     const subject = subjectMatch ? subjectMatch[1].trim() : `Bid Proposal — ${bid.project_name}`;
     const body = fullText.replace(/^SUBJECT:.*\n?/, '').trim();

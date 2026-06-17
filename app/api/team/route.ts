@@ -27,7 +27,7 @@ export async function GET() {
   const { data: profiles } = await serviceClient
     .from('profiles')
     .select('id, full_name, role, title, created_at')
-    .in('id', [...memberIds]);
+    .in('id', Array.from(memberIds));
 
   const profileMap = Object.fromEntries((profiles ?? []).map((p: { id: string; full_name: string | null; role: string; title: string | null; created_at: string }) => [p.id, p]));
 
