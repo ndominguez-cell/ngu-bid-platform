@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -58,11 +58,53 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Estimate not found' }, { status: 404 });
     }
 
-    const fileDescriptions = file_names.map((n, i) => `File ${i + 1}: ${n}`).join('\n');
     const existingItems = (existing.line_items ?? []) as Array<{
       trade: string; description: string; qty: number; unit: string; unit_price: number; total: number;
     }>;
     const existingSummary = existing.ai_summary ? `\n\nExisting scope summary: ${existing.ai_summary}` : '';
+
+    const contentParts: Anthropic.Messages.ContentBlockParam[] = [];
+
+    for (let i = 0; i < storage_paths.length; i++) {
+      const storagePath = storage_paths[i];
+      const fileName = file_names[i] ?? storagePath.split('/').pop();
+
+      const { data: fileData, error: dlError } = await supabase.storage
+        .from('documents')
+        .download(storagePath);
+
+      if (dlError || !fileData) {
+        contentParts.push({ type: 'text', text: `File ${i + 1}: ${fileName} (could not download)` });
+        continue;
+      }
+
+      const buffer = Buffer.from(await fileData.arrayBuffer());
+      const base64 = buffer.toString('base64');
+      const lowerName = fileName.toLowerCase();
+
+      if (lowerName.endsWith('.pdf')) {
+        contentParts.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+        } as Anthropic.Messages.ContentBlockParam);
+        contentParts.push({ type: 'text', text: `Above document is: ${fileName}` });
+      } else if (lowerName.match(/\.(png|jpg|jpeg|gif|webp)$/)) {
+        const ext = lowerName.split('.').pop()!;
+        const mediaType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+        contentParts.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64 },
+        });
+        contentParts.push({ type: 'text', text: `Above image is: ${fileName}` });
+      } else {
+        contentParts.push({ type: 'text', text: `File ${i + 1}: ${fileName} (unsupported format)` });
+      }
+    }
+
+    contentParts.push({
+      type: 'text',
+      text: `New files uploaded above.${existingSummary}\n\nExisting line item count: ${existingItems.length}\n\nGenerate only NEW line items not already represented.`,
+    });
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -77,7 +119,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       messages: [
         {
           role: 'user',
-          content: `New files uploaded:\n${fileDescriptions}${existingSummary}\n\nExisting line item count: ${existingItems.length}\n\nGenerate only NEW line items not already represented.`,
+          content: contentParts,
         },
       ],
     });

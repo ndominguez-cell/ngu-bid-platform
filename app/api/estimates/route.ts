@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -21,21 +21,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No files provided' }, { status: 400 });
     }
 
-    const fileDescriptions = (file_names as string[])
-      .map((n: string, i: number) => `File ${i + 1}: ${n}`)
-      .join('\n');
+    const contentParts: Anthropic.Messages.ContentBlockParam[] = [];
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
-      messages: [{
-        role: 'user',
-        content: `You are an expert construction estimator for NGU Construction, a Texas site work and concrete subcontractor.
+    for (let i = 0; i < (storage_paths as string[]).length; i++) {
+      const storagePath = (storage_paths as string[])[i];
+      const fileName = (file_names as string[])[i] ?? storagePath.split('/').pop();
 
-Analyze the following construction documents and produce a detailed cost estimate.
+      const { data: fileData, error: dlError } = await supabase.storage
+        .from('documents')
+        .download(storagePath);
 
-Files provided:
-${fileDescriptions}
+      if (dlError || !fileData) {
+        contentParts.push({ type: 'text', text: `File ${i + 1}: ${fileName} (could not download)` });
+        continue;
+      }
+
+      const buffer = Buffer.from(await fileData.arrayBuffer());
+      const base64 = buffer.toString('base64');
+      const lowerName = fileName.toLowerCase();
+
+      if (lowerName.endsWith('.pdf')) {
+        contentParts.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+        } as Anthropic.Messages.ContentBlockParam);
+        contentParts.push({ type: 'text', text: `Above document is: ${fileName}` });
+      } else if (lowerName.match(/\.(png|jpg|jpeg|gif|webp)$/)) {
+        const ext = lowerName.split('.').pop()!;
+        const mediaType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+        contentParts.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64 },
+        });
+        contentParts.push({ type: 'text', text: `Above image is: ${fileName}` });
+      } else {
+        contentParts.push({ type: 'text', text: `File ${i + 1}: ${fileName} (unsupported format)` });
+      }
+    }
+
+    contentParts.push({
+      type: 'text',
+      text: `You are an expert construction estimator for NGU Construction, a Texas site work and concrete subcontractor.
+
+Analyze the construction documents provided above and produce a detailed cost estimate.
 
 NGU Construction performs these trades: Concrete (flatwork, foundations, walls, curbs, gutters), Earthwork (grading, excavation, fill), Asphalt/Paving, Drainage, Utilities (water, sewer, storm), Masonry, Structural Steel, Striping, Sitework.
 
@@ -57,8 +85,13 @@ Return ONLY a valid JSON object — no extra text, no markdown, just JSON:
   "notes": "Key assumptions or exclusions"
 }
 
-Use current Texas market rates (2025-2026). Only include trades NGU performs. Base quantities on the project type inferred from filenames. Calculate total_amount as sum of line item totals times (1 + markup_pct/100).`,
-      }],
+Use current Texas market rates (2025-2026). Only include trades NGU performs. Extract quantities from the plan documents. Calculate total_amount as sum of line item totals times (1 + markup_pct/100).`,
+    });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: contentParts }],
     });
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
