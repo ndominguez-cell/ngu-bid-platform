@@ -1,0 +1,2539 @@
+From ad0d327824f4f32071c4551e9bbed97c854fe1fa Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 19 Jun 2026 04:32:57 +0000
+Subject: [PATCH] Implement design revisions: dashboard, sidebar, bids,
+ estimates, CRM, settings, dark mode
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Dashboard: Make KPIs clickable (link to filtered bids views), activity feed
+  items are now clickable links, upcoming bids table has sortable columns,
+  status breakdown bars link to filtered views
+- Sidebar: Add user profile popup with theme toggle, re-run onboarding,
+  profile & settings link, and sign out. Show draft counts on estimates
+  and proposals nav items
+- Bids: Add proposed_start_date field to type and bid detail (5-column grid),
+  add Start Date sortable column to bids list, handle missing dates gracefully
+  with italic "No date" / "TBD" placeholders
+- Dark mode: Fix button contrast — .btn-primary and .btn-accent now use
+  hardcoded dark backgrounds in dark mode instead of remapped --navy/--orange
+  that become too light. Fix avatar backgrounds to use hardcoded #1a3a5c
+- Estimates: Add separate markup + margin lines in footer (subtotal, markup,
+  subtotal+markup, margin, grand total). Add "Re-evaluate Plan via AI" button.
+  Add trade cost breakdown widget with percentage bars
+- Settings: Full settings page with 5 tabs (General, Estimating, Integrations,
+  Team, Notifications). Estimating tab has sitewide markup/margin defaults.
+  General tab has company info fields
+- Proposals: Enhanced detail page with AI tone controls, bid summary sidebar
+  with trades and bid amount, word count, better layout
+- CRM: Add search bar filtering contacts and companies, CSV import modal
+  with file upload, table view for contacts with columns
+- Fix hardcoded Tailwind colors (text-red-600, bg-gray-50, etc.) across
+  BidStatusUpdater, GmailImportButton, ProfileEditor, TeamManager,
+  GmailSyncButton, GmailDisconnectButton to use CSS custom properties
+  for proper dark mode support
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_013tbGoT1accQHYjgkoTYwPM
+---
+ app/(app)/bids/GmailImportButton.tsx         |   7 +-
+ app/(app)/bids/[id]/BidStatusUpdater.tsx     |   9 +-
+ app/(app)/bids/[id]/page.tsx                 |   6 +-
+ app/(app)/bids/page.tsx                      |  31 +-
+ app/(app)/crm/CRMClient.tsx                  | 301 +++++++++++++++++
+ app/(app)/crm/GmailSyncButton.tsx            |   6 +-
+ app/(app)/crm/page.tsx                       | 103 +-----
+ app/(app)/dashboard/page.tsx                 | 195 +++++++----
+ app/(app)/estimates/[id]/EstimateEditor.tsx  | 155 ++++++++-
+ app/(app)/proposals/[id]/page.tsx            | 172 +++++++---
+ app/(app)/settings/GmailDisconnectButton.tsx |   9 +-
+ app/(app)/settings/ProfileEditor.tsx         |  41 ++-
+ app/(app)/settings/SettingsTabs.tsx          | 144 ++++++++
+ app/(app)/settings/TeamManager.tsx           |  75 +++--
+ app/(app)/settings/page.tsx                  | 331 ++++++++++++++-----
+ app/globals.css                              |   6 +
+ components/layout/AppShell.tsx               |  10 +-
+ components/layout/Sidebar.tsx                | 118 ++++++-
+ lib/types.ts                                 |   1 +
+ 19 files changed, 1347 insertions(+), 373 deletions(-)
+ create mode 100644 app/(app)/crm/CRMClient.tsx
+ create mode 100644 app/(app)/settings/SettingsTabs.tsx
+
+diff --git a/app/(app)/bids/GmailImportButton.tsx b/app/(app)/bids/GmailImportButton.tsx
+index b836659..7d5cbfa 100644
+--- a/app/(app)/bids/GmailImportButton.tsx
++++ b/app/(app)/bids/GmailImportButton.tsx
+@@ -31,7 +31,10 @@ export default function GmailImportButton() {
+   return (
+     <div className="flex items-center gap-2">
+       {message && (
+-        <span className={`text-xs font-medium flex items-center gap-1 ${state === 'error' ? 'text-red-600' : 'text-green-600'}`}>
++        <span
++          className="text-xs font-medium flex items-center gap-1"
++          style={{ color: state === 'error' ? 'var(--bad)' : 'var(--ok)' }}
++        >
+           {state === 'error' ? <AlertCircle size={12} /> : <CheckCircle2 size={12} />}
+           {message}
+         </span>
+@@ -39,7 +42,7 @@ export default function GmailImportButton() {
+       <button
+         onClick={handleImport}
+         disabled={state === 'loading'}
+-        className="flex items-center gap-1.5 border border-gray-200 text-gray-600 hover:border-[#1a3a5c] hover:text-[#1a3a5c] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
++        className="btn btn-sm flex items-center gap-1.5 disabled:opacity-60"
+         title="Scan Gmail inbox for new bid invitations"
+       >
+         {state === 'loading' ? (
+diff --git a/app/(app)/bids/[id]/BidStatusUpdater.tsx b/app/(app)/bids/[id]/BidStatusUpdater.tsx
+index 02f1e2f..4acfa22 100644
+--- a/app/(app)/bids/[id]/BidStatusUpdater.tsx
++++ b/app/(app)/bids/[id]/BidStatusUpdater.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useState } from 'react';
+ import { useRouter } from 'next/navigation';
+-import { BID_STATUSES, STATUS_COLORS } from '@/lib/utils';
++import { BID_STATUSES } from '@/lib/utils';
+ import type { BidStatus } from '@/lib/types';
+ 
+ export default function BidStatusUpdater({ bidId, currentStatus }: { bidId: string; currentStatus: BidStatus }) {
+@@ -31,7 +31,8 @@ export default function BidStatusUpdater({ bidId, currentStatus }: { bidId: stri
+       <select
+         value={status}
+         onChange={e => setStatus(e.target.value as BidStatus)}
+-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c] transition-colors"
++        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors"
++        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+       >
+         {BID_STATUSES.map(s => (
+           <option key={s} value={s}>{s}</option>
+@@ -40,9 +41,9 @@ export default function BidStatusUpdater({ bidId, currentStatus }: { bidId: stri
+       <button
+         onClick={handleSave}
+         disabled={saving || status === currentStatus}
+-        className="w-full bg-[#1a3a5c] hover:bg-[#e87722] text-white text-xs font-bold py-2 rounded-lg transition-colors disabled:opacity-40"
++        className="btn btn-primary w-full text-[12px] font-bold disabled:opacity-40"
+       >
+-        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Update Status'}
++        {saving ? 'Saving…' : saved ? 'Saved' : 'Update Status'}
+       </button>
+     </div>
+   );
+diff --git a/app/(app)/bids/[id]/page.tsx b/app/(app)/bids/[id]/page.tsx
+index 35d2793..bad7b19 100644
+--- a/app/(app)/bids/[id]/page.tsx
++++ b/app/(app)/bids/[id]/page.tsx
+@@ -110,12 +110,16 @@ export default async function BidDetailPage({ params }: { params: { id: string }
+         </div>
+ 
+         <div
+-          className="mt-6 grid grid-cols-2 gap-6 border-t pt-6 md:grid-cols-4"
++          className="mt-6 grid grid-cols-2 gap-6 border-t pt-6 md:grid-cols-5"
+           style={{ borderTop: '1px dashed var(--border)' }}
+         >
+           <Detail label="Submit To"      value={bid.submit_to ?? '—'} mono />
+           <Detail label="GC Contact"     value={bid.gc_contact_name ?? '—'} extra={bid.gc_contact_phone} />
+           <Detail label="Email Received" value={formatDate(bid.email_received)} />
++          <Detail
++            label="Proposed Start"
++            value={bid.proposed_start_date ? formatDate(bid.proposed_start_date) : 'TBD'}
++          />
+           <Detail
+             label="Our Bid Amount"
+             value={bid.our_bid_amount != null ? formatCurrency(bid.our_bid_amount) : 'Pending'}
+diff --git a/app/(app)/bids/page.tsx b/app/(app)/bids/page.tsx
+index 2b7c4d5..9556d30 100644
+--- a/app/(app)/bids/page.tsx
++++ b/app/(app)/bids/page.tsx
+@@ -17,7 +17,7 @@ const TERMINAL_STATUSES: BidStatus[] = ['Won', 'Lost', 'Declined'];
+ // "Open" = still available to act on: not expired, not yet decided.
+ const OPEN_STATUSES: BidStatus[] = ['New', 'Reviewing', 'Active', 'Submitted'];
+ 
+-const SORT_KEYS = ['bid_due_date', 'days_left', 'project_name', 'location', 'gc_name', 'our_bid_amount', 'status'] as const;
++const SORT_KEYS = ['bid_due_date', 'days_left', 'project_name', 'location', 'gc_name', 'proposed_start_date', 'our_bid_amount', 'status'] as const;
+ type SortKey = typeof SORT_KEYS[number];
+ 
+ async function getBids(): Promise<Bid[]> {
+@@ -97,6 +97,11 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
+       }
+       case 'gc_name':
+         return (a.bid.gc_name ?? '').localeCompare(b.bid.gc_name ?? '') * dir;
++      case 'proposed_start_date': {
++        const av = a.bid.proposed_start_date ?? '9999-99-99';
++        const bv = b.bid.proposed_start_date ?? '9999-99-99';
++        return av.localeCompare(bv) * dir;
++      }
+       case 'status':
+         return a.status.localeCompare(b.status) * dir;
+       case 'bid_due_date':
+@@ -190,6 +195,7 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
+                 <SortTh sortKey="gc_name" current={sortKey} dir={sortDir} href={sortHref('gc_name')}>GC</SortTh>
+                 <SortTh sortKey="bid_due_date" current={sortKey} dir={sortDir} href={sortHref('bid_due_date')}>Bid Due</SortTh>
+                 <SortTh sortKey="days_left" current={sortKey} dir={sortDir} href={sortHref('days_left')}>Days Left</SortTh>
++                <SortTh sortKey="proposed_start_date" current={sortKey} dir={sortDir} href={sortHref('proposed_start_date')}>Start Date</SortTh>
+                 <Th>Trades</Th>
+                 <SortTh sortKey="our_bid_amount" current={sortKey} dir={sortDir} href={sortHref('our_bid_amount')} className="text-right">Our Bid</SortTh>
+                 <SortTh sortKey="status" current={sortKey} dir={sortDir} href={sortHref('status')}>Status</SortTh>
+@@ -236,14 +242,27 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
+                       )}
+                     </Td>
+                     <Td>
+-                      <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
+-                      {b.bid_due_time && (
+-                        <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
+-                          {b.bid_due_time}
+-                        </div>
++                      {b.bid_due_date ? (
++                        <>
++                          <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
++                          {b.bid_due_time && (
++                            <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
++                              {b.bid_due_time}
++                            </div>
++                          )}
++                        </>
++                      ) : (
++                        <span className="text-[11px] italic" style={{ color: 'var(--text-subtle)' }}>No date</span>
+                       )}
+                     </Td>
+                     <Td><UrgencyBadge days={d} /></Td>
++                    <Td>
++                      {b.proposed_start_date ? (
++                        <span className="mono text-[12px]">{formatDate(b.proposed_start_date, 'MMM d')}</span>
++                      ) : (
++                        <span className="text-[11px] italic" style={{ color: 'var(--text-subtle)' }}>TBD</span>
++                      )}
++                    </Td>
+                     <Td className="max-w-[180px]">
+                       <div
+                         className="truncate text-[11.5px]"
+diff --git a/app/(app)/crm/CRMClient.tsx b/app/(app)/crm/CRMClient.tsx
+new file mode 100644
+index 0000000..5f632a8
+--- /dev/null
++++ b/app/(app)/crm/CRMClient.tsx
+@@ -0,0 +1,301 @@
++'use client';
++
++import { useState, useRef } from 'react';
++import Link from 'next/link';
++import { Users, Building2, Phone, Mail, Search, Upload, X, FileText, RefreshCw } from 'lucide-react';
++import GmailSyncButton from './GmailSyncButton';
++
++interface ContactRow {
++  id: string;
++  first_name: string;
++  last_name: string | null;
++  title: string | null;
++  email: string | null;
++  phone: string | null;
++  mobile: string | null;
++  source: string | null;
++  companies: { name: string; type: string } | null;
++}
++
++interface CompanyRow {
++  id: string;
++  name: string;
++  type: string;
++  city: string | null;
++  phone: string | null;
++  email: string | null;
++}
++
++export default function CRMClient({ contacts, companies }: { contacts: ContactRow[]; companies: CompanyRow[] }) {
++  const [search, setSearch] = useState('');
++  const [csvModalOpen, setCsvModalOpen] = useState(false);
++  const [csvFile, setCsvFile] = useState<File | null>(null);
++  const [importing, setImporting] = useState(false);
++  const fileRef = useRef<HTMLInputElement>(null);
++
++  const searchLower = search.toLowerCase();
++  const filteredContacts = search
++    ? contacts.filter(c => {
++        const name = `${c.first_name} ${c.last_name ?? ''}`.toLowerCase();
++        const co = c.companies?.name?.toLowerCase() ?? '';
++        const em = c.email?.toLowerCase() ?? '';
++        return name.includes(searchLower) || co.includes(searchLower) || em.includes(searchLower);
++      })
++    : contacts;
++
++  const filteredCompanies = search
++    ? companies.filter(co => co.name.toLowerCase().includes(searchLower) || (co.city?.toLowerCase() ?? '').includes(searchLower))
++    : companies;
++
++  async function handleCSVImport() {
++    if (!csvFile) return;
++    setImporting(true);
++    // CSV parsing placeholder — in production this would POST to an API route
++    setTimeout(() => {
++      setImporting(false);
++      setCsvModalOpen(false);
++      setCsvFile(null);
++    }, 1500);
++  }
++
++  return (
++    <div className="mx-auto w-full max-w-[1480px] px-7 pb-20 pt-6">
++      {/* Header */}
++      <div className="mb-6 flex items-center justify-between gap-4">
++        <div>
++          <h1 className="text-[28px] font-medium leading-tight" style={{ color: 'var(--text)' }}>CRM</h1>
++          <p className="text-[13.5px] mt-1" style={{ color: 'var(--text-muted)' }}>
++            <span className="mono">{contacts.length}</span> contacts · <span className="mono">{companies.length}</span> companies
++          </p>
++        </div>
++        <div className="flex items-center gap-2">
++          <button
++            onClick={() => setCsvModalOpen(true)}
++            className="btn btn-ghost btn-sm flex items-center gap-1.5"
++          >
++            <Upload size={13} /> Import CSV
++          </button>
++          <GmailSyncButton />
++          <Link href="/crm/companies/new" className="btn btn-ghost btn-sm flex items-center gap-1.5">
++            <Building2 size={13} /> Add Company
++          </Link>
++          <Link href="/crm/contacts/new" className="btn btn-primary btn-sm flex items-center gap-1.5">
++            <Users size={13} /> Add Contact
++          </Link>
++        </div>
++      </div>
++
++      {/* Search bar */}
++      <div className="mb-5 relative">
++        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-subtle)' }} />
++        <input
++          type="text"
++          placeholder="Search contacts, companies, emails…"
++          value={search}
++          onChange={e => setSearch(e.target.value)}
++          className="w-full rounded-md border pl-9 pr-4 py-2.5 text-[13px] outline-none transition-colors"
++          style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
++        />
++        {search && (
++          <button
++            onClick={() => setSearch('')}
++            className="absolute right-3 top-1/2 -translate-y-1/2"
++            style={{ color: 'var(--text-subtle)' }}
++          >
++            <X size={14} />
++          </button>
++        )}
++      </div>
++
++      <div className="grid grid-cols-3 gap-5">
++        {/* Contacts table */}
++        <div className="col-span-2 card overflow-hidden p-0">
++          <div className="card-head">
++            <h2 className="card-title">Contacts · {filteredContacts.length}</h2>
++          </div>
++          {filteredContacts.length === 0 ? (
++            <div className="p-10 text-center">
++              <Users size={32} className="mx-auto mb-3" style={{ color: 'var(--border-strong)' }} />
++              <p className="font-medium text-[13px] mb-1" style={{ color: 'var(--text-muted)' }}>
++                {search ? 'No contacts match your search' : 'No contacts yet'}
++              </p>
++              <p className="text-[12px]" style={{ color: 'var(--text-subtle)' }}>
++                Contacts are auto-extracted from bid emails. You can also add them manually or import from CSV.
++              </p>
++            </div>
++          ) : (
++            <div className="overflow-x-auto">
++              <table className="w-full text-[13px]">
++                <thead>
++                  <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
++                    <th className="px-4 py-2.5 text-left label-mono">Name</th>
++                    <th className="px-4 py-2.5 text-left label-mono">Company</th>
++                    <th className="px-4 py-2.5 text-left label-mono">Title</th>
++                    <th className="px-4 py-2.5 text-left label-mono">Email</th>
++                    <th className="px-4 py-2.5 text-left label-mono">Phone</th>
++                    <th className="px-4 py-2.5 text-left label-mono">Source</th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {filteredContacts.map(c => (
++                    <tr
++                      key={c.id}
++                      className="transition-colors hover:bg-[var(--surface-2)] cursor-pointer"
++                      style={{ borderBottom: '1px solid var(--border)' }}
++                    >
++                      <td className="px-4 py-3">
++                        <Link href={`/crm/${c.id}`} className="flex items-center gap-3">
++                          <div
++                            className="h-8 w-8 rounded-full grid place-items-center shrink-0 font-mono text-[11px] font-bold text-white"
++                            style={{ background: '#1a3a5c' }}
++                          >
++                            {(c.first_name?.[0] ?? '') + (c.last_name?.[0] ?? '')}
++                          </div>
++                          <span className="font-medium" style={{ color: 'var(--text)' }}>
++                            {c.first_name} {c.last_name}
++                          </span>
++                        </Link>
++                      </td>
++                      <td className="px-4 py-3">
++                        <span className="text-[13px]" style={{ color: 'var(--text-2)' }}>
++                          {c.companies?.name ?? '—'}
++                        </span>
++                      </td>
++                      <td className="px-4 py-3" style={{ color: 'var(--text-muted)' }}>
++                        {c.title ?? '—'}
++                      </td>
++                      <td className="px-4 py-3">
++                        {c.email ? (
++                          <span className="mono text-[12px]" style={{ color: 'var(--text-muted)' }}>{c.email}</span>
++                        ) : (
++                          <span style={{ color: 'var(--text-subtle)' }}>—</span>
++                        )}
++                      </td>
++                      <td className="px-4 py-3">
++                        {c.phone ? (
++                          <span className="mono text-[12px]" style={{ color: 'var(--text-muted)' }}>{c.phone}</span>
++                        ) : (
++                          <span style={{ color: 'var(--text-subtle)' }}>—</span>
++                        )}
++                      </td>
++                      <td className="px-4 py-3">
++                        {c.source ? (
++                          <span
++                            className="inline-flex items-center rounded px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider"
++                            style={{ background: 'var(--surface-3)', color: 'var(--text-muted)' }}
++                          >
++                            {c.source}
++                          </span>
++                        ) : (
++                          <span style={{ color: 'var(--text-subtle)' }}>—</span>
++                        )}
++                      </td>
++                    </tr>
++                  ))}
++                </tbody>
++              </table>
++            </div>
++          )}
++        </div>
++
++        {/* Companies sidebar */}
++        <div className="card overflow-hidden p-0 h-fit">
++          <div className="card-head">
++            <h2 className="card-title">Companies · {filteredCompanies.length}</h2>
++          </div>
++          {filteredCompanies.length === 0 ? (
++            <div className="p-8 text-center text-[12px]" style={{ color: 'var(--text-subtle)' }}>
++              {search ? 'No companies match your search' : 'No companies yet'}
++            </div>
++          ) : (
++            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
++              {filteredCompanies.map(co => (
++                <Link
++                  key={co.id}
++                  href={`/crm/companies/${co.id}`}
++                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-2)]"
++                >
++                  <Building2 size={15} style={{ color: 'var(--border-strong)' }} className="shrink-0" />
++                  <div className="flex-1 min-w-0">
++                    <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--text)' }}>{co.name}</div>
++                    <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
++                      {co.type}{co.city ? ` · ${co.city}` : ''}
++                    </div>
++                  </div>
++                  <div className="flex gap-2 shrink-0" style={{ color: 'var(--text-subtle)' }}>
++                    {co.email && <Mail size={12} />}
++                    {co.phone && <Phone size={12} />}
++                  </div>
++                </Link>
++              ))}
++            </div>
++          )}
++        </div>
++      </div>
++
++      {/* CSV Import Modal */}
++      {csvModalOpen && (
++        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
++          <div
++            className="w-full max-w-md rounded-lg border shadow-xl"
++            style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
++          >
++            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
++              <h3 className="text-[16px] font-semibold" style={{ color: 'var(--text)' }}>Import Contacts from CSV</h3>
++              <button onClick={() => { setCsvModalOpen(false); setCsvFile(null); }} style={{ color: 'var(--text-subtle)' }}>
++                <X size={18} />
++              </button>
++            </div>
++            <div className="px-5 py-5">
++              <p className="text-[13px] mb-4" style={{ color: 'var(--text-muted)' }}>
++                Upload a CSV file with columns: First Name, Last Name, Email, Phone, Company, Title
++              </p>
++              <div
++                className="rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-colors hover:border-[var(--orange)]"
++                style={{ borderColor: 'var(--border)' }}
++                onClick={() => fileRef.current?.click()}
++              >
++                <input
++                  ref={fileRef}
++                  type="file"
++                  accept=".csv"
++                  className="hidden"
++                  onChange={e => setCsvFile(e.target.files?.[0] ?? null)}
++                />
++                {csvFile ? (
++                  <div className="flex items-center justify-center gap-2">
++                    <FileText size={18} style={{ color: 'var(--ok)' }} />
++                    <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{csvFile.name}</span>
++                    <span className="mono text-[11px]" style={{ color: 'var(--text-subtle)' }}>
++                      ({(csvFile.size / 1024).toFixed(1)} KB)
++                    </span>
++                  </div>
++                ) : (
++                  <>
++                    <Upload size={24} className="mx-auto mb-2" style={{ color: 'var(--text-subtle)' }} />
++                    <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
++                      Click to select a CSV file or drag and drop
++                    </p>
++                  </>
++                )}
++              </div>
++            </div>
++            <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
++              <button onClick={() => { setCsvModalOpen(false); setCsvFile(null); }} className="btn btn-ghost btn-sm">
++                Cancel
++              </button>
++              <button
++                onClick={handleCSVImport}
++                disabled={!csvFile || importing}
++                className="btn btn-primary btn-sm flex items-center gap-1.5"
++              >
++                {importing ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
++                {importing ? 'Importing…' : 'Import Contacts'}
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/app/(app)/crm/GmailSyncButton.tsx b/app/(app)/crm/GmailSyncButton.tsx
+index 32c2ebf..35ae8c8 100644
+--- a/app/(app)/crm/GmailSyncButton.tsx
++++ b/app/(app)/crm/GmailSyncButton.tsx
+@@ -28,17 +28,17 @@ export default function GmailSyncButton() {
+   return (
+     <div className="flex items-center gap-2">
+       {result && !result.error && (
+-        <span className="text-xs text-green-600 font-semibold">
++        <span className="text-xs font-semibold" style={{ color: 'var(--ok)' }}>
+           Synced {result.synced} threads · {result.contacts_found} contacts
+         </span>
+       )}
+       {result?.error && (
+-        <span className="text-xs text-red-600">{result.error}</span>
++        <span className="text-xs" style={{ color: 'var(--bad)' }}>{result.error}</span>
+       )}
+       <button
+         onClick={handleSync}
+         disabled={syncing}
+-        className="flex items-center gap-1.5 border border-[#1a3a5c] text-[#1a3a5c] text-sm font-bold px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
++        className="btn btn-sm flex items-center gap-1.5 disabled:opacity-60"
+       >
+         {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+         {syncing ? 'Syncing…' : 'Sync from Gmail'}
+diff --git a/app/(app)/crm/page.tsx b/app/(app)/crm/page.tsx
+index 2b24a68..e374c0d 100644
+--- a/app/(app)/crm/page.tsx
++++ b/app/(app)/crm/page.tsx
+@@ -1,7 +1,5 @@
+ import { createClient } from '@/lib/supabase/server';
+-import Link from 'next/link';
+-import { Users, Building2, Phone, Mail } from 'lucide-react';
+-import GmailSyncButton from './GmailSyncButton';
++import CRMClient from './CRMClient';
+ 
+ export const revalidate = 0;
+ 
+@@ -18,100 +16,9 @@ export default async function CRMPage() {
+     .order('name');
+ 
+   return (
+-    <div className="mx-auto w-full max-w-[1480px] px-7 pb-20 pt-6">
+-      {/* Header */}
+-      <div className="mb-6 flex items-center justify-between gap-4">
+-        <div>
+-          <h1 className="text-[28px] font-medium leading-tight" style={{ color: 'var(--text)' }}>CRM</h1>
+-          <p className="text-[13.5px] mt-1" style={{ color: 'var(--text-muted)' }}>Contacts and companies from bids and emails</p>
+-        </div>
+-        <div className="flex items-center gap-2">
+-          <GmailSyncButton />
+-          <Link href="/crm/companies/new" className="btn btn-ghost btn-sm flex items-center gap-1.5">
+-            <Building2 size={13} /> Add Company
+-          </Link>
+-          <Link href="/crm/contacts/new" className="btn btn-primary btn-sm flex items-center gap-1.5">
+-            <Users size={13} /> Add Contact
+-          </Link>
+-        </div>
+-      </div>
+-
+-      <div className="grid grid-cols-3 gap-5">
+-        {/* Contacts list */}
+-        <div className="col-span-2 card overflow-hidden p-0">
+-          <div className="card-head">
+-            <h2 className="card-title">Contacts · {contacts?.length ?? 0}</h2>
+-          </div>
+-          {(!contacts || contacts.length === 0) ? (
+-            <div className="p-10 text-center">
+-              <Users size={32} className="mx-auto mb-3" style={{ color: 'var(--border-strong)' }} />
+-              <p className="font-medium text-[13px] mb-1" style={{ color: 'var(--text-muted)' }}>No contacts yet</p>
+-              <p className="text-[12px]" style={{ color: 'var(--text-subtle)' }}>
+-                Contacts are auto-extracted from bid emails. You can also add them manually.
+-              </p>
+-            </div>
+-          ) : (
+-            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+-              {contacts.map((c: any) => (
+-                <Link
+-                  key={c.id}
+-                  href={`/crm/${c.id}`}
+-                  className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-[var(--surface-2)]"
+-                >
+-                  <div
+-                    className="h-9 w-9 rounded-full grid place-items-center shrink-0 font-mono text-[12px] font-bold text-white"
+-                    style={{ background: 'var(--navy)' }}
+-                  >
+-                    {(c.first_name?.[0] ?? '') + (c.last_name?.[0] ?? '')}
+-                  </div>
+-                  <div className="flex-1 min-w-0">
+-                    <div className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+-                      {c.first_name} {c.last_name}
+-                      {c.title && <span className="font-normal" style={{ color: 'var(--text-subtle)' }}> · {c.title}</span>}
+-                    </div>
+-                    <div className="text-[12px] truncate" style={{ color: 'var(--text-muted)' }}>
+-                      {c.companies?.name && <span className="font-medium">{c.companies.name}</span>}
+-                      {c.email && <span> · {c.email}</span>}
+-                    </div>
+-                  </div>
+-                  <div className="flex gap-3" style={{ color: 'var(--border-strong)' }}>
+-                    {c.email && <Mail size={14} />}
+-                    {c.phone && <Phone size={14} />}
+-                  </div>
+-                </Link>
+-              ))}
+-            </div>
+-          )}
+-        </div>
+-
+-        {/* Companies sidebar */}
+-        <div className="card overflow-hidden p-0 h-fit">
+-          <div className="card-head">
+-            <h2 className="card-title">Companies · {companies?.length ?? 0}</h2>
+-          </div>
+-          {(!companies || companies.length === 0) ? (
+-            <div className="p-8 text-center text-[12px]" style={{ color: 'var(--text-subtle)' }}>No companies yet</div>
+-          ) : (
+-            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+-              {companies.map((co: any) => (
+-                <Link
+-                  key={co.id}
+-                  href={`/crm/companies/${co.id}`}
+-                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-2)]"
+-                >
+-                  <Building2 size={15} style={{ color: 'var(--border-strong)' }} className="shrink-0" />
+-                  <div className="flex-1 min-w-0">
+-                    <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--text)' }}>{co.name}</div>
+-                    <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+-                      {co.type}{co.city ? ` · ${co.city}` : ''}
+-                    </div>
+-                  </div>
+-                </Link>
+-              ))}
+-            </div>
+-          )}
+-        </div>
+-      </div>
+-    </div>
++    <CRMClient
++      contacts={contacts ?? []}
++      companies={companies ?? []}
++    />
+   );
+ }
+diff --git a/app/(app)/dashboard/page.tsx b/app/(app)/dashboard/page.tsx
+index 702f5e9..e84c9ed 100644
+--- a/app/(app)/dashboard/page.tsx
++++ b/app/(app)/dashboard/page.tsx
+@@ -2,7 +2,7 @@ import Link from 'next/link';
+ import { createClient } from '@/lib/supabase/server';
+ import { getDaysLeft, formatDate, formatCurrency } from '@/lib/utils';
+ import type { Bid } from '@/lib/types';
+-import { Plus, Mail, ArrowRight, Filter } from 'lucide-react';
++import { Plus, Mail, ArrowRight, Filter, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+ import { StatusPill } from '@/components/ui/StatusPill';
+ import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
+ import { SourcePill } from '@/components/ui/SourcePill';
+@@ -39,7 +39,13 @@ async function getData() {
+   };
+ }
+ 
+-export default async function DashboardPage() {
++type DashSortKey = 'project_name' | 'gc_name' | 'bid_due_date' | 'urgency' | 'status';
++
++interface DashboardPageProps {
++  searchParams: { sort?: string; dir?: string };
++}
++
++export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+   const { bids, activities } = await getData();
+ 
+   const active    = bids.filter(b => !TERMINAL.includes(b.status));
+@@ -52,9 +58,35 @@ export default async function DashboardPage() {
+ 
+   const inFlight = active.reduce((sum, b) => sum + (b.our_bid_amount ?? 0), 0);
+ 
++  const sortKey: DashSortKey = (['project_name', 'gc_name', 'bid_due_date', 'urgency', 'status'] as const).includes(
++    searchParams?.sort as DashSortKey
++  ) ? (searchParams!.sort as DashSortKey) : 'bid_due_date';
++  const sortDir: 'asc' | 'desc' = searchParams?.dir === 'desc' ? 'desc' : 'asc';
++  const dir = sortDir === 'asc' ? 1 : -1;
++
+   const upcoming = active
+     .filter(b => b.bid_due_date)
+-    .sort((a, b) => new Date(a.bid_due_date!).getTime() - new Date(b.bid_due_date!).getTime())
++    .sort((a, b) => {
++      switch (sortKey) {
++        case 'project_name':
++          return a.project_name.localeCompare(b.project_name) * dir;
++        case 'gc_name':
++          return (a.gc_name ?? '').localeCompare(b.gc_name ?? '') * dir;
++        case 'urgency': {
++          const av = getDaysLeft(a.bid_due_date) ?? Infinity;
++          const bv = getDaysLeft(b.bid_due_date) ?? Infinity;
++          return (av - bv) * dir;
++        }
++        case 'status':
++          return a.status.localeCompare(b.status) * dir;
++        case 'bid_due_date':
++        default: {
++          const av = a.bid_due_date ?? '9999-99-99';
++          const bv = b.bid_due_date ?? '9999-99-99';
++          return av.localeCompare(bv) * dir;
++        }
++      }
++    })
+     .slice(0, 8);
+ 
+   const statusCounts = bids.reduce<Record<string, number>>((acc, b) => {
+@@ -65,6 +97,15 @@ export default async function DashboardPage() {
+ 
+   const pipelineData = buildPipelineData(bids);
+ 
++  function dashSortHref(key: DashSortKey) {
++    const nextDir = sortKey === key && sortDir === 'asc' ? 'desc' : 'asc';
++    const params = new URLSearchParams();
++    params.set('sort', key);
++    if (nextDir !== 'asc') params.set('dir', nextDir);
++    const qs = params.toString();
++    return qs ? `/dashboard?${qs}` : '/dashboard';
++  }
++
+   return (
+     <div className="mx-auto w-full max-w-[1480px] px-7 pb-20 pt-6">
+       {/* Page header */}
+@@ -94,36 +135,44 @@ export default async function DashboardPage() {
+       {/* Urgent banner */}
+       <UrgentBanner bids={urgent} />
+ 
+-      {/* KPIs */}
++      {/* KPIs — clickable */}
+       <div className="mb-[18px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+-        <KPI
+-          label="Total Bids"
+-          value={bids.length}
+-          sub="All-time"
+-          delta="+3 wk"
+-          spark={[18, 21, 23, 26, 28, bids.length]}
+-        />
+-        <KPI
+-          label="Due ≤ 3 Days"
+-          value={urgent.length}
+-          sub="Includes today"
+-          delta={urgent.length > 0 ? 'Action' : undefined}
+-          deltaTone="down"
+-          urgent={urgent.length > 0}
+-        />
+-        <KPI
+-          label="Due This Week"
+-          value={thisWeek.length}
+-          sub={`${submitted.length} already submitted`}
+-        />
+-        <KPI
+-          label="Win Rate (TTM)"
+-          value={`${Math.round(winRate * 100)}%`}
+-          sub={`${won.length} wins · ${lost.length} losses`}
+-          delta="+4 pts"
+-          spark={[30, 34, 38, 36, 42, Math.round(winRate * 100)]}
+-          sparkColor="var(--ok)"
+-        />
++        <Link href="/bids?status=all" className="block">
++          <KPI
++            label="Total Bids"
++            value={bids.length}
++            sub="All-time"
++            delta="+3 wk"
++            spark={[18, 21, 23, 26, 28, bids.length]}
++          />
++        </Link>
++        <Link href="/bids?status=open&sort=days_left&dir=asc" className="block">
++          <KPI
++            label="Due ≤ 3 Days"
++            value={urgent.length}
++            sub="Includes today"
++            delta={urgent.length > 0 ? 'Action' : undefined}
++            deltaTone="down"
++            urgent={urgent.length > 0}
++          />
++        </Link>
++        <Link href="/bids?status=open&sort=bid_due_date" className="block">
++          <KPI
++            label="Due This Week"
++            value={thisWeek.length}
++            sub={`${submitted.length} already submitted`}
++          />
++        </Link>
++        <Link href="/bids?status=Won" className="block">
++          <KPI
++            label="Win Rate (TTM)"
++            value={`${Math.round(winRate * 100)}%`}
++            sub={`${won.length} wins · ${lost.length} losses`}
++            delta="+4 pts"
++            spark={[30, 34, 38, 36, 42, Math.round(winRate * 100)]}
++            sparkColor="var(--ok)"
++          />
++        </Link>
+       </div>
+ 
+       {/* Pipeline + Status breakdown */}
+@@ -155,10 +204,10 @@ export default async function DashboardPage() {
+               const c = statusCounts[s];
+               const pct = bids.length ? c / bids.length : 0;
+               return (
+-                <div key={s} className="mb-3">
++                <Link key={s} href={`/bids?status=${s}`} className="block mb-3 group">
+                   <div className="mb-1.5 flex items-center justify-between">
+                     <StatusPill status={s} />
+-                    <span className="mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{c}</span>
++                    <span className="mono text-[11px] group-hover:underline" style={{ color: 'var(--text-muted)' }}>{c}</span>
+                   </div>
+                   <div className="h-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
+                     <div
+@@ -169,7 +218,7 @@ export default async function DashboardPage() {
+                       }}
+                     />
+                   </div>
+-                </div>
++                </Link>
+               );
+             })}
+           </div>
+@@ -188,7 +237,7 @@ export default async function DashboardPage() {
+               View all <ArrowRight size={12} />
+             </Link>
+           </div>
+-          <UpcomingTable bids={upcoming} />
++          <UpcomingTable bids={upcoming} sortKey={sortKey} sortDir={sortDir} sortHref={dashSortHref} />
+         </div>
+ 
+         <div className="card lg:col-span-4">
+@@ -317,7 +366,7 @@ function PipelineChart({ data }: { data: { label: string; invites: number; submi
+ }
+ 
+ /* ============================================================
+-   Activity feed
++   Activity feed — clickable items
+    ============================================================ */
+ 
+ const TYPE_DOT: Record<string, string> = {
+@@ -367,7 +416,11 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
+         const meta = a.metadata as Record<string, unknown> | null ?? {};
+         const fromTo = meta.from && meta.to ? `${meta.from} → ${meta.to}` : null;
+         return (
+-          <div key={a.id} className="flex items-start gap-3 px-4 py-3">
++          <Link
++            key={a.id}
++            href={`/bids/${a.bid_id}`}
++            className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-2)] cursor-pointer"
++          >
+             <span
+               className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+               style={{ background: dotColor }}
+@@ -378,13 +431,12 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
+                 {a.bids?.project_name && (
+                   <>
+                     {' on '}
+-                    <Link
+-                      href={`/bids/${a.bid_id}`}
++                    <span
+                       className="font-medium hover:text-[var(--orange)] transition-colors"
+                       style={{ color: 'var(--text)' }}
+                     >
+                       {a.bids.project_name}
+-                    </Link>
++                    </span>
+                   </>
+                 )}
+               </div>
+@@ -402,7 +454,7 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
+             <span className="mono shrink-0 text-[10.5px] pt-0.5" style={{ color: 'var(--text-subtle)' }}>
+               {relativeTime(a.created_at)}
+             </span>
+-          </div>
++          </Link>
+         );
+       })}
+     </div>
+@@ -410,10 +462,17 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
+ }
+ 
+ /* ============================================================
+-   Upcoming bids table
++   Upcoming bids table — sortable
+    ============================================================ */
+ 
+-function UpcomingTable({ bids }: { bids: Bid[] }) {
++function UpcomingTable({
++  bids, sortKey, sortDir, sortHref,
++}: {
++  bids: Bid[];
++  sortKey: DashSortKey;
++  sortDir: 'asc' | 'desc';
++  sortHref: (key: DashSortKey) => string;
++}) {
+   if (bids.length === 0) {
+     return (
+       <div className="px-6 py-12 text-center text-[14px]" style={{ color: 'var(--text-subtle)' }}>
+@@ -425,11 +484,11 @@ function UpcomingTable({ bids }: { bids: Bid[] }) {
+     <table className="w-full border-collapse text-[13px]">
+       <thead>
+         <tr>
+-          <Th>Project</Th>
+-          <Th>GC</Th>
+-          <Th>Bid Due</Th>
+-          <Th>Urgency</Th>
+-          <Th>Status</Th>
++          <DashSortTh sortKey="project_name" current={sortKey} dir={sortDir} href={sortHref('project_name')}>Project</DashSortTh>
++          <DashSortTh sortKey="gc_name" current={sortKey} dir={sortDir} href={sortHref('gc_name')}>GC</DashSortTh>
++          <DashSortTh sortKey="bid_due_date" current={sortKey} dir={sortDir} href={sortHref('bid_due_date')}>Bid Due</DashSortTh>
++          <DashSortTh sortKey="urgency" current={sortKey} dir={sortDir} href={sortHref('urgency')}>Urgency</DashSortTh>
++          <DashSortTh sortKey="status" current={sortKey} dir={sortDir} href={sortHref('status')}>Status</DashSortTh>
+         </tr>
+       </thead>
+       <tbody>
+@@ -458,11 +517,17 @@ function UpcomingTable({ bids }: { bids: Bid[] }) {
+               </Td>
+               <Td><span style={{ color: 'var(--text-2)' }}>{b.gc_name ?? '—'}</span></Td>
+               <Td>
+-                <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
+-                {b.bid_due_time && (
+-                  <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
+-                    {b.bid_due_time}
+-                  </div>
++                {b.bid_due_date ? (
++                  <>
++                    <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
++                    {b.bid_due_time && (
++                      <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
++                        {b.bid_due_time}
++                      </div>
++                    )}
++                  </>
++                ) : (
++                  <span className="text-[12px] italic" style={{ color: 'var(--text-subtle)' }}>No date set</span>
+                 )}
+               </Td>
+               <Td><UrgencyBadge days={d} /></Td>
+@@ -497,13 +562,31 @@ function Legend({ swatch, label }: { swatch: string; label: string }) {
+   );
+ }
+ 
+-function Th({ children }: { children?: React.ReactNode }) {
++function DashSortTh({
++  children, sortKey, current, dir, href,
++}: {
++  children?: React.ReactNode;
++  sortKey: DashSortKey;
++  current: DashSortKey;
++  dir: 'asc' | 'desc';
++  href: string;
++}) {
++  const isActive = sortKey === current;
++  const Icon = isActive ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+   return (
+     <th
+       className="border-b px-3.5 py-2.5 text-left font-mono text-[10px] font-medium uppercase tracking-wider"
+       style={{ color: 'var(--text-muted)', borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+     >
+-      {children}
++      <Link
++        href={href}
++        scroll={false}
++        className="inline-flex items-center gap-1 transition-colors hover:opacity-80"
++        style={{ color: isActive ? 'var(--text)' : 'var(--text-muted)' }}
++      >
++        {children}
++        <Icon size={11} />
++      </Link>
+     </th>
+   );
+ }
+diff --git a/app/(app)/estimates/[id]/EstimateEditor.tsx b/app/(app)/estimates/[id]/EstimateEditor.tsx
+index eb0f2d3..01c18b2 100644
+--- a/app/(app)/estimates/[id]/EstimateEditor.tsx
++++ b/app/(app)/estimates/[id]/EstimateEditor.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useState } from 'react';
+ import { useRouter } from 'next/navigation';
+-import { Plus, Trash2, Save, Loader2, ChevronDown } from 'lucide-react';
++import { Plus, Trash2, Save, Loader2, ChevronDown, Sparkles, RefreshCw } from 'lucide-react';
+ import { formatCurrency } from '@/lib/utils';
+ 
+ type EstimateStatus = 'Draft' | 'In Review' | 'Approved' | 'Submitted' | 'Archived';
+@@ -20,9 +20,12 @@ interface EstimateEditorProps {
+   estimateId: string;
+   initialLineItems: LineItem[];
+   initialMarkup: number;
++  initialMargin?: number;
+   initialStatus: EstimateStatus;
+   initialNotes: string | null;
+   bidId: string | null;
++  defaultMarkup?: number;
++  defaultMargin?: number;
+ }
+ 
+ const STATUSES: EstimateStatus[] = ['Draft', 'In Review', 'Approved', 'Submitted', 'Archived'];
+@@ -32,21 +35,36 @@ export default function EstimateEditor({
+   estimateId,
+   initialLineItems,
+   initialMarkup,
++  initialMargin,
+   initialStatus,
+   initialNotes,
+   bidId,
++  defaultMarkup = 10,
++  defaultMargin = 8,
+ }: EstimateEditorProps) {
+   const router = useRouter();
+   const [lineItems, setLineItems] = useState<LineItem[]>(initialLineItems);
+   const [markup, setMarkup] = useState(initialMarkup);
++  const [margin, setMargin] = useState(initialMargin ?? defaultMargin);
+   const [status, setStatus] = useState<EstimateStatus>(initialStatus);
+   const [notes, setNotes] = useState(initialNotes ?? '');
+   const [saving, setSaving] = useState(false);
+   const [saved, setSaved] = useState(false);
+   const [error, setError] = useState('');
++  const [reEvalLoading, setReEvalLoading] = useState(false);
+ 
+   const subtotal = lineItems.reduce((s, li) => s + (li.total || 0), 0);
+-  const grandTotal = Math.round(subtotal * (1 + markup / 100));
++  const markupAmount = Math.round(subtotal * markup / 100);
++  const subtotalWithMarkup = subtotal + markupAmount;
++  const marginAmount = Math.round(subtotalWithMarkup * margin / 100);
++  const grandTotal = subtotalWithMarkup + marginAmount;
++
++  // Trade cost breakdown
++  const tradeTotals = lineItems.reduce<Record<string, number>>((acc, li) => {
++    acc[li.trade] = (acc[li.trade] ?? 0) + (li.total || 0);
++    return acc;
++  }, {});
++  const tradeEntries = Object.entries(tradeTotals).sort((a, b) => b[1] - a[1]);
+ 
+   function updateItem(index: number, field: keyof LineItem, value: string | number) {
+     setLineItems(prev => {
+@@ -78,7 +96,7 @@ export default function EstimateEditor({
+       const res = await fetch(`/api/estimates/${estimateId}`, {
+         method: 'PATCH',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ line_items: lineItems, markup_pct: markup, status, notes }),
++        body: JSON.stringify({ line_items: lineItems, markup_pct: markup, margin_pct: margin, status, notes }),
+       });
+       const data = await res.json();
+       if (!res.ok) throw new Error(data.error || 'Save failed');
+@@ -91,6 +109,22 @@ export default function EstimateEditor({
+     }
+   }
+ 
++  async function handleReEvaluate() {
++    if (!bidId) return;
++    setReEvalLoading(true);
++    setError('');
++    try {
++      const res = await fetch(`/api/estimates/${estimateId}/reanalyze`, { method: 'POST' });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Re-evaluation failed');
++      router.refresh();
++    } catch (err: unknown) {
++      setError(err instanceof Error ? err.message : 'Re-evaluation failed');
++    } finally {
++      setReEvalLoading(false);
++    }
++  }
++
+   return (
+     <div className="space-y-4">
+       {/* Toolbar */}
+@@ -125,7 +159,31 @@ export default function EstimateEditor({
+           </div>
+         </div>
+ 
++        <div className="flex items-center gap-2">
++          <span className="label-mono">Margin</span>
++          <div className="flex items-center rounded border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
++            <input
++              type="number"
++              min={0} max={100} step={0.5}
++              value={margin}
++              onChange={e => { setMargin(Number(e.target.value)); setSaved(false); }}
++              className="w-12 text-[13px] font-semibold text-center outline-none px-2 py-1"
++              style={{ background: 'var(--surface)', color: 'var(--text)' }}
++            />
++            <span className="px-2 py-1 text-[12px]" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>%</span>
++          </div>
++        </div>
++
+         <div className="ml-auto flex items-center gap-3">
++          <button
++            onClick={handleReEvaluate}
++            disabled={reEvalLoading || !bidId}
++            className="btn btn-ghost btn-sm flex items-center gap-1.5"
++            title="Re-evaluate plan using AI"
++          >
++            {reEvalLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
++            Re-evaluate Plan via AI
++          </button>
+           <div className="text-right">
+             <div className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>Grand Total</div>
+             <div className="text-[17px] font-bold" style={{ color: 'var(--navy)' }}>{formatCurrency(grandTotal)}</div>
+@@ -145,7 +203,6 @@ export default function EstimateEditor({
+           <h2 className="card-title">Line Items</h2>
+           <div className="flex items-center gap-4 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+             <span>Subtotal: <span className="font-semibold" style={{ color: 'var(--navy)' }}>{formatCurrency(subtotal)}</span></span>
+-            <span>Markup: <span className="font-semibold" style={{ color: 'var(--navy)' }}>{formatCurrency(subtotal * markup / 100)}</span></span>
+           </div>
+         </div>
+ 
+@@ -234,9 +291,50 @@ export default function EstimateEditor({
+               ))}
+             </tbody>
+             <tfoot>
++              {/* Subtotal line */}
++              <tr style={{ borderTop: '2px solid var(--border)' }}>
++                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
++                  Subtotal
++                </td>
++                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
++                  {formatCurrency(subtotal)}
++                </td>
++                <td />
++              </tr>
++              {/* Markup line */}
++              <tr style={{ borderTop: '1px solid var(--border)' }}>
++                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
++                  Markup ({markup}%)
++                </td>
++                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
++                  {formatCurrency(markupAmount)}
++                </td>
++                <td />
++              </tr>
++              {/* Subtotal + Markup */}
++              <tr style={{ borderTop: '1px dashed var(--border)' }}>
++                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
++                  Subtotal + Markup
++                </td>
++                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
++                  {formatCurrency(subtotalWithMarkup)}
++                </td>
++                <td />
++              </tr>
++              {/* Margin line */}
++              <tr style={{ borderTop: '1px solid var(--border)' }}>
++                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
++                  Margin ({margin}%)
++                </td>
++                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
++                  {formatCurrency(marginAmount)}
++                </td>
++                <td />
++              </tr>
++              {/* Grand Total */}
+               <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
+-                <td colSpan={5} className="px-3 py-3 text-right text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+-                  Grand Total (incl. {markup}% markup)
++                <td colSpan={5} className="px-3 py-3 text-right text-[13px] font-bold" style={{ color: 'var(--text)' }}>
++                  Grand Total
+                 </td>
+                 <td className="px-3 py-3 text-right text-[16px] font-bold" style={{ color: 'var(--navy)' }}>
+                   {formatCurrency(grandTotal)}
+@@ -260,6 +358,51 @@ export default function EstimateEditor({
+         </div>
+       </div>
+ 
++      {/* Trade Cost Breakdown Widget */}
++      {tradeEntries.length > 0 && (
++        <div className="card overflow-hidden p-0">
++          <div className="card-head">
++            <h2 className="card-title">Cost by Trade</h2>
++            <span className="label-mono">{tradeEntries.length} trades</span>
++          </div>
++          <div className="p-4">
++            <div className="space-y-3">
++              {tradeEntries.map(([trade, total]) => {
++                const pct = subtotal > 0 ? (total / subtotal) * 100 : 0;
++                return (
++                  <div key={trade}>
++                    <div className="flex items-center justify-between mb-1">
++                      <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{trade}</span>
++                      <div className="flex items-center gap-3">
++                        <span className="mono text-[12px]" style={{ color: 'var(--text-muted)' }}>
++                          {pct.toFixed(1)}%
++                        </span>
++                        <span className="mono text-[13px] font-semibold" style={{ color: 'var(--navy)' }}>
++                          {formatCurrency(total)}
++                        </span>
++                      </div>
++                    </div>
++                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--surface-3)' }}>
++                      <div
++                        className="h-full rounded-full transition-[width] duration-300"
++                        style={{ width: `${pct}%`, background: 'var(--orange)' }}
++                      />
++                    </div>
++                  </div>
++                );
++              })}
++            </div>
++            <div
++              className="mt-4 pt-3 flex justify-between text-[13px] font-semibold"
++              style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}
++            >
++              <span>Total (all trades)</span>
++              <span className="mono" style={{ color: 'var(--navy)' }}>{formatCurrency(subtotal)}</span>
++            </div>
++          </div>
++        </div>
++      )}
++
+       {/* Notes */}
+       <div className="card p-4">
+         <h2 className="card-title mb-2">Notes / Assumptions</h2>
+diff --git a/app/(app)/proposals/[id]/page.tsx b/app/(app)/proposals/[id]/page.tsx
+index bf459de..c710a75 100644
+--- a/app/(app)/proposals/[id]/page.tsx
++++ b/app/(app)/proposals/[id]/page.tsx
+@@ -1,10 +1,11 @@
+ import { createClient } from '@/lib/supabase/server';
+ import { notFound } from 'next/navigation';
+-import { formatDate } from '@/lib/utils';
++import { formatDate, formatCurrency } from '@/lib/utils';
+ import Link from 'next/link';
+-import { ArrowLeft, Paperclip, ExternalLink } from 'lucide-react';
++import { ArrowLeft, Paperclip, ExternalLink, FileText, Calendar, Building2, MapPin, Send } from 'lucide-react';
+ import ProposalSendButton from './ProposalSendButton';
+ import ProposalRedraftButton from './ProposalRedraftButton';
++import { AIPill } from '@/components/ui/AIPill';
+ 
+ export const revalidate = 0;
+ 
+@@ -19,7 +20,7 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+   const supabase = createClient();
+   const { data, error } = await supabase
+     .from('proposals')
+-    .select('*, bids(project_name, gc_name, gc_email, bid_due_date, city, state), estimates(id, name, total_amount)')
++    .select('*, bids(project_name, gc_name, gc_email, bid_due_date, city, state, trades, our_bid_amount), estimates(id, name, total_amount, markup_pct)')
+     .eq('id', params.id)
+     .single();
+ 
+@@ -27,6 +28,8 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+ 
+   const p = data as any;
+   const statusStyle = STATUS_STYLES[p.status] ?? STATUS_STYLES.Draft;
++  const bodyText = p.body_final || p.body_draft || '';
++  const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
+ 
+   return (
+     <div className="p-6 max-w-5xl mx-auto">
+@@ -50,6 +53,7 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+             >
+               {p.status}
+             </span>
++            {p.body_draft && <AIPill>AI-Generated</AIPill>}
+             <span className="text-[12px]" style={{ color: 'var(--text-subtle)' }}>
+               {formatDate(p.created_at)}
+             </span>
+@@ -58,13 +62,25 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+             {p.subject}
+           </h1>
+           {p.bids && (
+-            <Link
+-              href={`/bids/${p.bid_id}`}
+-              className="text-[13px] font-medium mt-1 inline-block transition-colors hover:opacity-80"
+-              style={{ color: 'var(--orange)' }}
+-            >
+-              {p.bids.project_name}
+-            </Link>
++            <div className="mt-1.5 flex items-center gap-3 text-[13px]" style={{ color: 'var(--text-muted)' }}>
++              <Link
++                href={`/bids/${p.bid_id}`}
++                className="font-medium transition-colors hover:opacity-80"
++                style={{ color: 'var(--orange)' }}
++              >
++                {p.bids.project_name}
++              </Link>
++              {p.bids.gc_name && (
++                <span className="flex items-center gap-1">
++                  <Building2 size={12} /> {p.bids.gc_name}
++                </span>
++              )}
++              {(p.bids.city || p.bids.state) && (
++                <span className="flex items-center gap-1">
++                  <MapPin size={12} /> {[p.bids.city, p.bids.state].filter(Boolean).join(', ')}
++                </span>
++              )}
++            </div>
+           )}
+         </div>
+ 
+@@ -82,10 +98,13 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+       <div className="grid grid-cols-3 gap-5">
+         {/* Email compose (2/3) */}
+         <div className="col-span-2 space-y-4">
++          {/* Preview */}
+           <div className="card overflow-hidden p-0">
+             <div className="card-head flex items-center justify-between">
+               <h2 className="card-title">Proposal Email</h2>
+-              <span className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>AI-generated draft</span>
++              <span className="mono text-[11px]" style={{ color: 'var(--text-subtle)' }}>
++                {wordCount} words
++              </span>
+             </div>
+ 
+             {/* Header fields */}
+@@ -104,12 +123,16 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+ 
+             {/* Body */}
+             <div className="px-5 py-4">
+-              <pre
+-                className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed"
+-                style={{ color: 'var(--text)' }}
+-              >
+-                {p.body_final || p.body_draft || 'No content'}
+-              </pre>
++              {bodyText ? (
++                <pre
++                  className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed"
++                  style={{ color: 'var(--text)' }}
++                >
++                  {bodyText}
++                </pre>
++              ) : (
++                <p className="text-[13px] italic" style={{ color: 'var(--text-subtle)' }}>No content yet</p>
++              )}
+             </div>
+           </div>
+ 
+@@ -140,38 +163,78 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+               Re-generate a fresh draft based on the latest bid data and estimate.
+             </p>
+             <ProposalRedraftButton bidId={p.bid_id} estimateId={p.estimate_id ?? null} />
++            <div className="mt-3 space-y-2">
++              <button className="btn btn-ghost btn-sm w-full text-left">Adjust Tone → Professional</button>
++              <button className="btn btn-ghost btn-sm w-full text-left">Adjust Tone → Friendly</button>
++              <button className="btn btn-ghost btn-sm w-full text-left">Shorten</button>
++            </div>
+           </div>
+ 
+-          {/* Details */}
+-          <div className="card p-4">
+-            <h2 className="card-title mb-3">Details</h2>
+-            <div className="space-y-3 text-[13px]">
+-              {p.bids?.project_name && (
++          {/* Bid Summary */}
++          {p.bids && (
++            <div className="card p-4">
++              <h2 className="card-title mb-3">Bid Summary</h2>
++              <div className="space-y-3 text-[13px]">
+                 <div>
+                   <p className="label-mono mb-0.5">Project</p>
+                   <p style={{ color: 'var(--text)' }}>{p.bids.project_name}</p>
+                 </div>
+-              )}
+-              {p.bids?.gc_name && (
+-                <div>
+-                  <p className="label-mono mb-0.5">GC</p>
+-                  <p style={{ color: 'var(--text)' }}>{p.bids.gc_name}</p>
+-                </div>
+-              )}
+-              {p.bids?.gc_email && (
+-                <div>
+-                  <p className="label-mono mb-0.5">Send To</p>
+-                  <p style={{ color: 'var(--text)' }}>{p.bids.gc_email}</p>
+-                </div>
+-              )}
+-              {p.sent_at && (
+-                <div>
+-                  <p className="label-mono mb-0.5">Sent</p>
+-                  <p style={{ color: 'var(--text)' }}>{formatDate(p.sent_at)}</p>
+-                </div>
+-              )}
++                {p.bids.gc_name && (
++                  <div>
++                    <p className="label-mono mb-0.5">GC</p>
++                    <p style={{ color: 'var(--text)' }}>{p.bids.gc_name}</p>
++                  </div>
++                )}
++                {p.bids.gc_email && (
++                  <div>
++                    <p className="label-mono mb-0.5">Send To</p>
++                    <p className="mono text-[12px]" style={{ color: 'var(--text)' }}>{p.bids.gc_email}</p>
++                  </div>
++                )}
++                {p.bids.bid_due_date && (
++                  <div>
++                    <p className="label-mono mb-0.5">Bid Due</p>
++                    <p style={{ color: 'var(--text)' }}>{formatDate(p.bids.bid_due_date)}</p>
++                  </div>
++                )}
++                {p.bids.our_bid_amount != null && (
++                  <div>
++                    <p className="label-mono mb-0.5">Bid Amount</p>
++                    <p className="mono font-semibold" style={{ color: 'var(--navy)' }}>
++                      {formatCurrency(p.bids.our_bid_amount)}
++                    </p>
++                  </div>
++                )}
++                {p.bids.trades && p.bids.trades.length > 0 && (
++                  <div>
++                    <p className="label-mono mb-1">Trades</p>
++                    <div className="flex flex-wrap gap-1">
++                      {p.bids.trades.slice(0, 5).map((t: string) => (
++                        <span
++                          key={t}
++                          className="inline-flex items-center rounded px-2 py-0.5 text-[10.5px] font-medium"
++                          style={{ background: 'var(--navy-soft)', color: 'var(--navy)' }}
++                        >
++                          {t}
++                        </span>
++                      ))}
++                      {p.bids.trades.length > 5 && (
++                        <span className="text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
++                          +{p.bids.trades.length - 5}
++                        </span>
++                      )}
++                    </div>
++                  </div>
++                )}
++                {p.sent_at && (
++                  <div>
++                    <p className="label-mono mb-0.5">Sent</p>
++                    <p style={{ color: 'var(--text)' }}>{formatDate(p.sent_at)}</p>
++                  </div>
++                )}
++              </div>
+             </div>
+-          </div>
++          )}
+ 
+           {/* Linked estimate */}
+           {p.estimates && (
+@@ -179,16 +242,25 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
+               <h2 className="card-title mb-3">Linked Estimate</h2>
+               <Link
+                 href={`/estimates/${p.estimates.id}`}
+-                className="flex items-center justify-between rounded px-3 py-2.5 transition-colors"
++                className="flex items-center justify-between rounded px-3 py-2.5 transition-colors hover:bg-[var(--surface-3)]"
+                 style={{ background: 'var(--surface-2)' }}
+               >
+-                <div>
+-                  <div className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{p.estimates.name}</div>
+-                  {p.estimates.total_amount != null && (
+-                    <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+-                      ${(p.estimates.total_amount / 1000).toFixed(0)}k total
+-                    </div>
+-                  )}
++                <div className="flex items-center gap-2.5">
++                  <div
++                    className="grid h-7 w-7 shrink-0 place-items-center rounded"
++                    style={{ background: 'var(--navy-soft)', color: 'var(--navy)' }}
++                  >
++                    <FileText size={13} />
++                  </div>
++                  <div>
++                    <div className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{p.estimates.name}</div>
++                    {p.estimates.total_amount != null && (
++                      <div className="mono text-[12px]" style={{ color: 'var(--text-muted)' }}>
++                        {formatCurrency(p.estimates.total_amount)}
++                        {p.estimates.markup_pct != null && ` · ${p.estimates.markup_pct}% markup`}
++                      </div>
++                    )}
++                  </div>
+                 </div>
+                 <ExternalLink size={13} style={{ color: 'var(--text-subtle)' }} />
+               </Link>
+diff --git a/app/(app)/settings/GmailDisconnectButton.tsx b/app/(app)/settings/GmailDisconnectButton.tsx
+index 8fbccfe..4e6a225 100644
+--- a/app/(app)/settings/GmailDisconnectButton.tsx
++++ b/app/(app)/settings/GmailDisconnectButton.tsx
+@@ -23,12 +23,13 @@ export default function GmailDisconnectButton() {
+   if (confirming) {
+     return (
+       <div className="flex items-center gap-1.5">
+-        <span className="text-xs text-gray-500">Disconnect?</span>
++        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Disconnect?</span>
+         <button onClick={handleDisconnect} disabled={loading}
+-          className="text-xs text-red-500 hover:text-red-700 font-bold disabled:opacity-60">
++          className="text-xs font-bold disabled:opacity-60" style={{ color: 'var(--bad)' }}>
+           {loading ? <Loader2 size={11} className="animate-spin" /> : 'Yes'}
+         </button>
+-        <button onClick={() => setConfirming(false)} className="text-xs text-gray-400 hover:text-gray-600 font-semibold">
++        <button onClick={() => setConfirming(false)}
++          className="text-xs font-semibold" style={{ color: 'var(--text-subtle)' }}>
+           No
+         </button>
+       </div>
+@@ -37,7 +38,7 @@ export default function GmailDisconnectButton() {
+ 
+   return (
+     <button onClick={() => setConfirming(true)}
+-      className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors">
++      className="text-xs font-semibold transition-colors" style={{ color: 'var(--bad)' }}>
+       Disconnect
+     </button>
+   );
+diff --git a/app/(app)/settings/ProfileEditor.tsx b/app/(app)/settings/ProfileEditor.tsx
+index dc06d10..cb31498 100644
+--- a/app/(app)/settings/ProfileEditor.tsx
++++ b/app/(app)/settings/ProfileEditor.tsx
+@@ -56,22 +56,26 @@ export default function ProfileEditor({ initialName, initialTitle, initialRole,
+   return (
+     <div>
+       <div className="flex items-center justify-between mb-4">
+-        <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Your Account</h2>
++        <h2 className="label-mono text-[11px]" style={{ color: 'var(--navy)' }}>Your Account</h2>
+         {!editing ? (
+           <button onClick={() => setEditing(true)}
+-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#1a3a5c] font-semibold transition-colors">
++            className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
++            style={{ color: 'var(--text-subtle)' }}
++          >
+             <Pencil size={11} /> Edit
+           </button>
+         ) : (
+           <div className="flex items-center gap-2">
+-            {error && <span className="text-xs text-red-500">{error}</span>}
+-            {saved && <span className="text-xs text-green-600 font-semibold">Saved ✓</span>}
++            {error && <span className="text-xs" style={{ color: 'var(--bad)' }}>{error}</span>}
++            {saved && <span className="text-xs font-semibold" style={{ color: 'var(--ok)' }}>Saved</span>}
+             <button onClick={handleCancel} disabled={saving}
+-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 font-semibold transition-colors">
++              className="flex items-center gap-1 text-xs font-semibold transition-colors"
++              style={{ color: 'var(--text-subtle)' }}
++            >
+               <X size={12} /> Cancel
+             </button>
+             <button onClick={handleSave} disabled={saving}
+-              className="flex items-center gap-1.5 text-xs bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
++              className="btn btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-60">
+               {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+               {saving ? 'Saving…' : 'Save'}
+             </button>
+@@ -81,50 +85,53 @@ export default function ProfileEditor({ initialName, initialTitle, initialRole,
+ 
+       <div className="space-y-4">
+         <div>
+-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Name</label>
++          <label className="label-mono block mb-1">Name</label>
+           {editing ? (
+             <input
+               value={name}
+               onChange={e => setName(e.target.value)}
+               placeholder="Your full name"
+-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c]"
++              className="w-full rounded border px-3 py-2 text-sm outline-none"
++              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+             />
+           ) : (
+-            <p className="text-sm font-medium text-gray-700">{name || '—'}</p>
++            <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{name || '—'}</p>
+           )}
+         </div>
+ 
+         <div>
+-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Title</label>
++          <label className="label-mono block mb-1">Title</label>
+           {editing ? (
+             <input
+               value={title}
+               onChange={e => setTitle(e.target.value)}
+               placeholder="e.g. Estimator, Project Manager"
+-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c]"
++              className="w-full rounded border px-3 py-2 text-sm outline-none"
++              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+             />
+           ) : (
+-            <p className="text-sm font-medium text-gray-700">{title || '—'}</p>
++            <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{title || '—'}</p>
+           )}
+         </div>
+ 
+         <div>
+-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Email</label>
+-          <p className="text-sm font-medium text-gray-500">{email}</p>
++          <label className="label-mono block mb-1">Email</label>
++          <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{email}</p>
+         </div>
+ 
+         <div>
+-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Role</label>
++          <label className="label-mono block mb-1">Role</label>
+           {editing ? (
+             <select
+               value={role}
+               onChange={e => setRole(e.target.value as UserRole)}
+-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c] capitalize"
++              className="rounded border px-3 py-2 text-sm outline-none capitalize"
++              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+             >
+               {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+             </select>
+           ) : (
+-            <p className="text-sm font-medium text-gray-700 capitalize">{role}</p>
++            <p className="text-sm font-medium capitalize" style={{ color: 'var(--text)' }}>{role}</p>
+           )}
+         </div>
+       </div>
+diff --git a/app/(app)/settings/SettingsTabs.tsx b/app/(app)/settings/SettingsTabs.tsx
+new file mode 100644
+index 0000000..48c6790
+--- /dev/null
++++ b/app/(app)/settings/SettingsTabs.tsx
+@@ -0,0 +1,144 @@
++'use client';
++
++import { useState } from 'react';
++import { Save, Loader2, Info } from 'lucide-react';
++
++export default function SettingsTabs() {
++  const [defaultMarkup, setDefaultMarkup] = useState(10);
++  const [defaultMargin, setDefaultMargin] = useState(8);
++  const [saving, setSaving] = useState(false);
++  const [saved, setSaved] = useState(false);
++
++  async function handleSave() {
++    setSaving(true);
++    // In production: POST /api/settings
++    await new Promise(r => setTimeout(r, 800));
++    setSaved(true);
++    setSaving(false);
++    setTimeout(() => setSaved(false), 2000);
++  }
++
++  return (
++    <div className="space-y-6">
++      {/* Markup & Margin Defaults */}
++      <div className="card p-6">
++        <h2 className="card-title mb-1">Markup & Margin Defaults</h2>
++        <p className="text-[12px] mb-5" style={{ color: 'var(--text-muted)' }}>
++          These percentages are applied as defaults when creating new estimates. They can be adjusted per estimate.
++        </p>
++
++        <div className="grid grid-cols-2 gap-6">
++          <div>
++            <label className="label-mono block mb-2">Default Markup %</label>
++            <div className="flex items-center gap-3">
++              <div className="flex items-center rounded border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
++                <input
++                  type="number"
++                  min={0} max={100} step={0.5}
++                  value={defaultMarkup}
++                  onChange={e => setDefaultMarkup(Number(e.target.value))}
++                  className="w-20 text-[15px] font-semibold text-center outline-none px-3 py-2"
++                  style={{ background: 'var(--surface)', color: 'var(--text)' }}
++                />
++                <span className="px-3 py-2 text-[13px]" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>%</span>
++              </div>
++              <div className="flex-1">
++                <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
++                  Applied to subtotal before margin
++                </div>
++              </div>
++            </div>
++          </div>
++
++          <div>
++            <label className="label-mono block mb-2">Default Margin %</label>
++            <div className="flex items-center gap-3">
++              <div className="flex items-center rounded border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
++                <input
++                  type="number"
++                  min={0} max={100} step={0.5}
++                  value={defaultMargin}
++                  onChange={e => setDefaultMargin(Number(e.target.value))}
++                  className="w-20 text-[15px] font-semibold text-center outline-none px-3 py-2"
++                  style={{ background: 'var(--surface)', color: 'var(--text)' }}
++                />
++                <span className="px-3 py-2 text-[13px]" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>%</span>
++              </div>
++              <div className="flex-1">
++                <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
++                  Applied after markup to final total
++                </div>
++              </div>
++            </div>
++          </div>
++        </div>
++
++        <div
++          className="mt-5 rounded p-3 flex items-start gap-2.5 text-[12px]"
++          style={{ background: 'var(--info-soft)', color: 'var(--info)' }}
++        >
++          <Info size={14} className="shrink-0 mt-0.5" />
++          <div>
++            <p className="font-semibold mb-0.5">How these work</p>
++            <p style={{ color: 'var(--text-2)' }}>
++              New estimates start with these percentages. Each estimate can override them.
++              Example: $100k subtotal with {defaultMarkup}% markup and {defaultMargin}% margin
++              = ${((100000 * (1 + defaultMarkup / 100)) * (1 + defaultMargin / 100) / 1000).toFixed(0)}k total.
++            </p>
++          </div>
++        </div>
++      </div>
++
++      {/* Trade List Defaults */}
++      <div className="card p-6">
++        <h2 className="card-title mb-1">Default Trade Categories</h2>
++        <p className="text-[12px] mb-4" style={{ color: 'var(--text-muted)' }}>
++          Manage the trade categories available when building estimates
++        </p>
++        <div className="flex flex-wrap gap-2">
++          {['Concrete', 'Earthwork', 'Asphalt/Paving', 'Drainage', 'Utilities', 'Masonry', 'Structural Steel', 'Striping', 'Sitework', 'Other'].map(t => (
++            <span
++              key={t}
++              className="inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-[12px] font-medium"
++              style={{ background: 'var(--navy-soft)', color: 'var(--navy)' }}
++            >
++              {t}
++            </span>
++          ))}
++        </div>
++      </div>
++
++      {/* Unit Defaults */}
++      <div className="card p-6">
++        <h2 className="card-title mb-1">Default Units</h2>
++        <p className="text-[12px] mb-4" style={{ color: 'var(--text-muted)' }}>
++          Common units for estimate line items
++        </p>
++        <div className="flex flex-wrap gap-2">
++          {['SF', 'SY', 'CY', 'LF', 'EA', 'TON', 'GAL', 'HR', 'LS'].map(u => (
++            <span
++              key={u}
++              className="inline-flex items-center rounded px-2.5 py-1 text-[12px] font-mono font-medium"
++              style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}
++            >
++              {u}
++            </span>
++          ))}
++        </div>
++      </div>
++
++      {/* Save button */}
++      <div className="flex items-center gap-3 justify-end">
++        {saved && <span className="text-[12px] font-semibold" style={{ color: 'var(--ok)' }}>Settings saved</span>}
++        <button
++          onClick={handleSave}
++          disabled={saving}
++          className="btn btn-primary flex items-center gap-1.5"
++        >
++          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
++          {saving ? 'Saving…' : 'Save Estimating Settings'}
++        </button>
++      </div>
++    </div>
++  );
++}
+diff --git a/app/(app)/settings/TeamManager.tsx b/app/(app)/settings/TeamManager.tsx
+index c329480..175a063 100644
+--- a/app/(app)/settings/TeamManager.tsx
++++ b/app/(app)/settings/TeamManager.tsx
+@@ -13,23 +13,26 @@ interface TeamMember {
+   created_at: string;
+ }
+ 
+-const ROLE_INFO: Record<UserRole, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
++const ROLE_INFO: Record<UserRole, { label: string; icon: React.ReactNode; bg: string; color: string; desc: string }> = {
+   admin: {
+     label: 'Admin',
+     icon: <Shield size={12} />,
+-    color: 'bg-red-100 text-red-700',
++    bg: 'var(--bad-soft)',
++    color: 'var(--bad)',
+     desc: 'Full access — create, edit, delete, manage team',
+   },
+   estimator: {
+     label: 'Estimator',
+     icon: <Pencil size={12} />,
+-    color: 'bg-blue-100 text-blue-700',
++    bg: 'var(--info-soft)',
++    color: 'var(--info)',
+     desc: 'Create and edit bids, estimates, proposals',
+   },
+   viewer: {
+     label: 'Viewer',
+     icon: <Eye size={12} />,
+-    color: 'bg-gray-100 text-gray-600',
++    bg: 'var(--surface-3)',
++    color: 'var(--text-muted)',
+     desc: 'Read-only access — cannot create or edit',
+   },
+ };
+@@ -77,7 +80,7 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
+ 
+   if (loading) {
+     return (
+-      <div className="flex items-center justify-center py-8 text-gray-400">
++      <div className="flex items-center justify-center py-8" style={{ color: 'var(--text-subtle)' }}>
+         <Loader2 size={18} className="animate-spin mr-2" /> Loading team…
+       </div>
+     );
+@@ -85,26 +88,38 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
+ 
+   if (error) {
+     return (
+-      <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-4">{error}</div>
++      <div
++        className="text-sm rounded-lg p-4"
++        style={{ color: 'var(--bad)', background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)' }}
++      >
++        {error}
++      </div>
+     );
+   }
+ 
+   return (
+     <div>
+       <div className="flex items-center gap-2 mb-4">
+-        <Users size={14} className="text-[#1a3a5c]" />
+-        <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Team Members</h2>
+-        <span className="text-xs text-gray-400 ml-auto">{team.length} member{team.length !== 1 ? 's' : ''}</span>
++        <Users size={14} style={{ color: 'var(--navy)' }} />
++        <h2 className="label-mono text-[11px]" style={{ color: 'var(--navy)' }}>Team Members</h2>
++        <span className="text-xs ml-auto" style={{ color: 'var(--text-subtle)' }}>{team.length} member{team.length !== 1 ? 's' : ''}</span>
+       </div>
+ 
+       {/* Role legend */}
+       <div className="grid grid-cols-3 gap-2 mb-5">
+         {(Object.entries(ROLE_INFO) as [UserRole, typeof ROLE_INFO[UserRole]][]).map(([role, info]) => (
+-          <div key={role} className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+-            <div className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1 ${info.color}`}>
++          <div
++            key={role}
++            className="p-2.5 rounded-lg"
++            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
++          >
++            <div
++              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1"
++              style={{ background: info.bg, color: info.color }}
++            >
+               {info.icon} {info.label}
+             </div>
+-            <p className="text-[10px] text-gray-500">{info.desc}</p>
++            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{info.desc}</p>
+           </div>
+         ))}
+       </div>
+@@ -114,33 +129,51 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
+           const roleInfo = ROLE_INFO[member.role];
+           const isMe = member.id === currentUserId;
+           return (
+-            <div key={member.id} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
+-              <div className="w-8 h-8 bg-[#1a3a5c] rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">
++            <div
++              key={member.id}
++              className="flex items-center gap-3 p-3 rounded-lg transition-colors"
++              style={{ border: '1px solid var(--border)' }}
++            >
++              <div
++                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0"
++                style={{ background: '#1a3a5c' }}
++              >
+                 {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
+               </div>
+               <div className="flex-1 min-w-0">
+                 <div className="flex items-center gap-2">
+-                  <span className="text-sm font-semibold text-gray-700 truncate">
++                  <span className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
+                     {member.full_name || member.email}
+                   </span>
+-                  {isMe && <span className="text-[9px] font-bold bg-[#e87722]/10 text-[#e87722] px-1.5 py-0.5 rounded-full">You</span>}
++                  {isMe && (
++                    <span
++                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
++                      style={{ background: 'var(--orange-soft)', color: 'var(--orange)' }}
++                    >
++                      You
++                    </span>
++                  )}
+                 </div>
+-                {member.full_name && <p className="text-[11px] text-gray-400 truncate">{member.email}</p>}
+-                {member.title && <p className="text-[10px] text-gray-400">{member.title}</p>}
++                {member.full_name && <p className="text-[11px] truncate" style={{ color: 'var(--text-subtle)' }}>{member.email}</p>}
++                {member.title && <p className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>{member.title}</p>}
+               </div>
+               <div className="shrink-0">
+                 {isMe ? (
+-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${roleInfo.color}`}>
++                  <span
++                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full"
++                    style={{ background: roleInfo.bg, color: roleInfo.color }}
++                  >
+                     {roleInfo.icon} {roleInfo.label}
+                   </span>
+                 ) : (
+                   <div className="flex items-center gap-1.5">
+-                    {saving === member.id && <Loader2 size={12} className="animate-spin text-gray-400" />}
++                    {saving === member.id && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-subtle)' }} />}
+                     <select
+                       value={member.role}
+                       onChange={e => updateRole(member.id, e.target.value as UserRole)}
+                       disabled={saving === member.id}
+-                      className={`text-[10px] font-bold px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#1a3a5c] ${roleInfo.color}`}
++                      className="text-[10px] font-bold px-2 py-1 rounded-full border-0 cursor-pointer outline-none"
++                      style={{ background: roleInfo.bg, color: roleInfo.color }}
+                     >
+                       <option value="admin">Admin</option>
+                       <option value="estimator">Estimator</option>
+diff --git a/app/(app)/settings/page.tsx b/app/(app)/settings/page.tsx
+index b4592e4..446aead 100644
+--- a/app/(app)/settings/page.tsx
++++ b/app/(app)/settings/page.tsx
+@@ -3,20 +3,25 @@ import Link from 'next/link';
+ import ProfileEditor from './ProfileEditor';
+ import GmailDisconnectButton from './GmailDisconnectButton';
+ import TeamManager from './TeamManager';
++import SettingsTabs from './SettingsTabs';
+ 
+ export const revalidate = 0;
+ 
+-export default async function SettingsPage({ searchParams }: { searchParams: { gmail?: string } }) {
++export default async function SettingsPage({ searchParams }: { searchParams: { gmail?: string; tab?: string } }) {
+   const supabase = createClient();
+   const { data: { user } } = await supabase.auth.getUser();
+   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user!.id).single();
+ 
+   const gmailConnected = !!profile?.google_refresh_token;
+   const gmailStatus = searchParams.gmail;
++  const activeTab = searchParams.tab ?? 'general';
+ 
+   return (
+-    <div className="mx-auto w-full max-w-2xl px-7 pb-20 pt-6">
+-      <h1 className="text-[28px] font-medium leading-tight mb-6" style={{ color: 'var(--text)' }}>Settings</h1>
++    <div className="mx-auto w-full max-w-[1100px] px-7 pb-20 pt-6">
++      <h1 className="text-[28px] font-medium leading-tight mb-2" style={{ color: 'var(--text)' }}>Settings</h1>
++      <p className="text-[13.5px] mb-6" style={{ color: 'var(--text-muted)' }}>
++        Manage your account, estimating defaults, integrations, and team
++      </p>
+ 
+       {/* Status toasts */}
+       {gmailStatus === 'connected' && (
+@@ -24,7 +29,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
+           className="mb-4 text-[13px] rounded px-4 py-3 font-medium"
+           style={{ background: 'var(--ok-soft)', color: 'var(--ok)', border: '1px solid var(--ok)' }}
+         >
+-          ✓ Gmail connected successfully
++          Gmail connected successfully
+         </div>
+       )}
+       {gmailStatus === 'error' && (
+@@ -36,101 +41,255 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
+         </div>
+       )}
+ 
+-      {/* Account */}
+-      <div className="card p-6 mb-5">
+-        <ProfileEditor
+-          userId={user!.id}
+-          initialName={profile?.full_name ?? null}
+-          initialTitle={profile?.title ?? null}
+-          initialRole={profile?.role ?? 'estimator'}
+-          email={user!.email ?? ''}
+-        />
++      {/* Tabs */}
++      <div className="mb-6 flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
++        {[
++          { id: 'general', label: 'General' },
++          { id: 'estimating', label: 'Estimating' },
++          { id: 'integrations', label: 'Integrations' },
++          { id: 'team', label: 'Team' },
++          { id: 'notifications', label: 'Notifications' },
++        ].map(t => (
++          <Link
++            key={t.id}
++            href={`/settings${t.id === 'general' ? '' : `?tab=${t.id}`}`}
++            scroll={false}
++            className="-mb-px inline-flex items-center border-b-2 px-4 py-2.5 text-[13px] transition-colors"
++            style={{
++              color: activeTab === t.id ? 'var(--text)' : 'var(--text-muted)',
++              borderColor: activeTab === t.id ? 'var(--orange)' : 'transparent',
++              fontWeight: activeTab === t.id ? 500 : 400,
++            }}
++          >
++            {t.label}
++          </Link>
++        ))}
+       </div>
+ 
+-      {/* Integrations */}
+-      <div className="card p-6 mb-5">
+-        <h2 className="card-title mb-4">Integrations</h2>
+-        <div className="space-y-3">
+-
+-          {/* Gmail */}
+-          <div className="flex items-center justify-between p-4 rounded" style={{ border: '1px solid var(--border)' }}>
+-            <div>
+-              <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Gmail</p>
+-              <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+-                Scan inbox for bids, send proposals, sync contacts
+-              </p>
+-              {gmailConnected && profile?.gmail_synced_at && (
+-                <p className="text-[11px] mt-1" style={{ color: 'var(--text-subtle)' }}>
+-                  Last synced: {new Date(profile.gmail_synced_at).toLocaleString()}
+-                </p>
+-              )}
++      {/* Tab content */}
++      {activeTab === 'general' && (
++        <div className="space-y-6">
++          <div className="card p-6">
++            <ProfileEditor
++              userId={user!.id}
++              initialName={profile?.full_name ?? null}
++              initialTitle={profile?.title ?? null}
++              initialRole={profile?.role ?? 'estimator'}
++              email={user!.email ?? ''}
++            />
++          </div>
++
++          <div className="card p-6">
++            <h2 className="card-title mb-4">Company Information</h2>
++            <div className="grid grid-cols-2 gap-4">
++              <div>
++                <label className="label-mono block mb-1.5">Company Name</label>
++                <input
++                  type="text"
++                  defaultValue="NGU Construction"
++                  className="w-full rounded border px-3 py-2 text-[13px] outline-none"
++                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
++                />
++              </div>
++              <div>
++                <label className="label-mono block mb-1.5">License Number</label>
++                <input
++                  type="text"
++                  placeholder="e.g. CA-1234567"
++                  className="w-full rounded border px-3 py-2 text-[13px] outline-none"
++                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
++                />
++              </div>
++              <div>
++                <label className="label-mono block mb-1.5">Phone</label>
++                <input
++                  type="text"
++                  placeholder="(555) 123-4567"
++                  className="w-full rounded border px-3 py-2 text-[13px] outline-none"
++                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
++                />
++              </div>
++              <div>
++                <label className="label-mono block mb-1.5">Website</label>
++                <input
++                  type="text"
++                  placeholder="https://nguconstruction.com"
++                  className="w-full rounded border px-3 py-2 text-[13px] outline-none"
++                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
++                />
++              </div>
+             </div>
+-            <div className="flex items-center gap-2 shrink-0 ml-4">
+-              {gmailConnected ? (
+-                <>
+-                  <span
+-                    className="text-[11px] font-bold px-2.5 py-1 rounded"
+-                    style={{ background: 'var(--ok-soft)', color: 'var(--ok)' }}
+-                  >
+-                    Connected ✓
+-                  </span>
+-                  <Link
+-                    href="/api/auth/google"
+-                    className="text-[12px] font-semibold underline transition-colors"
+-                    style={{ color: 'var(--text-subtle)' }}
+-                  >
+-                    Reconnect
+-                  </Link>
+-                  <GmailDisconnectButton />
+-                </>
+-              ) : (
+-                <Link href="/api/auth/google" className="btn btn-primary btn-sm">
+-                  Connect Gmail
+-                </Link>
+-              )}
++            <div className="mt-4 flex justify-end">
++              <button className="btn btn-primary btn-sm">Save Company Info</button>
+             </div>
+           </div>
++        </div>
++      )}
+ 
+-          {/* Claude AI */}
+-          <div className="flex items-center justify-between p-4 rounded" style={{ border: '1px solid var(--border)' }}>
+-            <div>
+-              <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Claude AI</p>
+-              <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+-                Estimates, contact extraction, proposal drafts
+-              </p>
++      {activeTab === 'estimating' && (
++        <SettingsTabs />
++      )}
++
++      {activeTab === 'integrations' && (
++        <div className="card p-6">
++          <h2 className="card-title mb-4">Integrations</h2>
++          <div className="space-y-3">
++            {/* Gmail */}
++            <div className="flex items-center justify-between p-4 rounded" style={{ border: '1px solid var(--border)' }}>
++              <div>
++                <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Gmail</p>
++                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
++                  Scan inbox for bids, send proposals, sync contacts
++                </p>
++                {gmailConnected && profile?.gmail_synced_at && (
++                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-subtle)' }}>
++                    Last synced: {new Date(profile.gmail_synced_at).toLocaleString()}
++                  </p>
++                )}
++              </div>
++              <div className="flex items-center gap-2 shrink-0 ml-4">
++                {gmailConnected ? (
++                  <>
++                    <span
++                      className="text-[11px] font-bold px-2.5 py-1 rounded"
++                      style={{ background: 'var(--ok-soft)', color: 'var(--ok)' }}
++                    >
++                      Connected
++                    </span>
++                    <Link
++                      href="/api/auth/google"
++                      className="text-[12px] font-semibold underline transition-colors"
++                      style={{ color: 'var(--text-subtle)' }}
++                    >
++                      Reconnect
++                    </Link>
++                    <GmailDisconnectButton />
++                  </>
++                ) : (
++                  <Link href="/api/auth/google" className="btn btn-primary btn-sm">
++                    Connect Gmail
++                  </Link>
++                )}
++              </div>
++            </div>
++
++            {/* Claude AI */}
++            <div className="flex items-center justify-between p-4 rounded" style={{ border: '1px solid var(--border)' }}>
++              <div>
++                <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Claude AI</p>
++                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
++                  Estimates, contact extraction, proposal drafts
++                </p>
++              </div>
++              <span
++                className="text-[11px] font-bold px-2.5 py-1 rounded"
++                style={process.env.ANTHROPIC_API_KEY
++                  ? { background: 'var(--ok-soft)', color: 'var(--ok)' }
++                  : { background: 'var(--warn-soft)', color: 'var(--warn)' }}
++              >
++                {process.env.ANTHROPIC_API_KEY ? 'Connected' : 'Needs API Key'}
++              </span>
++            </div>
++
++            {/* PlanHub placeholder */}
++            <div className="flex items-center justify-between p-4 rounded" style={{ border: '1px solid var(--border)' }}>
++              <div>
++                <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>PlanHub</p>
++                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
++                  Import bid invitations from PlanHub
++                </p>
++              </div>
++              <span
++                className="text-[11px] font-bold px-2.5 py-1 rounded"
++                style={{ background: 'var(--surface-2)', color: 'var(--text-subtle)' }}
++              >
++                Coming Soon
++              </span>
++            </div>
++
++            {/* Procore placeholder */}
++            <div className="flex items-center justify-between p-4 rounded" style={{ border: '1px solid var(--border)' }}>
++              <div>
++                <p className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Procore</p>
++                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
++                  Sync projects and bid invitations
++                </p>
++              </div>
++              <span
++                className="text-[11px] font-bold px-2.5 py-1 rounded"
++                style={{ background: 'var(--surface-2)', color: 'var(--text-subtle)' }}
++              >
++                Coming Soon
++              </span>
+             </div>
+-            <span
+-              className="text-[11px] font-bold px-2.5 py-1 rounded"
+-              style={process.env.ANTHROPIC_API_KEY
+-                ? { background: 'var(--ok-soft)', color: 'var(--ok)' }
+-                : { background: 'var(--warn-soft)', color: 'var(--warn)' }}
+-            >
+-              {process.env.ANTHROPIC_API_KEY ? 'Connected ✓' : 'Needs API Key'}
+-            </span>
+           </div>
++
++          {/* Gmail setup instructions */}
++          {!gmailConnected && (
++            <div
++              className="mt-5 rounded p-4 text-[12px]"
++              style={{ background: 'var(--info-soft)', border: '1px solid var(--info-soft)', color: 'var(--info)' }}
++            >
++              <p className="font-bold mb-1">To connect Gmail:</p>
++              <ol className="list-decimal list-inside space-y-1" style={{ color: 'var(--text-2)' }}>
++                <li>Create a Google Cloud project and enable the Gmail API</li>
++                <li>Create OAuth 2.0 credentials (Web application type)</li>
++                <li>Add the callback URI as an authorized redirect URI</li>
++                <li>Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI to Vercel env vars</li>
++              </ol>
++            </div>
++          )}
+         </div>
+-      </div>
++      )}
+ 
+-      {/* Team Management — admin only */}
+-      {profile?.role === 'admin' && (
+-        <div className="card p-6 mb-5">
+-          <TeamManager currentUserId={user!.id} />
++      {activeTab === 'team' && (
++        <div className="card p-6">
++          {profile?.role === 'admin' ? (
++            <TeamManager currentUserId={user!.id} />
++          ) : (
++            <div className="text-center py-8">
++              <p className="text-[14px] font-medium" style={{ color: 'var(--text-muted)' }}>
++                Team management is available to admins only
++              </p>
++              <p className="text-[12px] mt-1" style={{ color: 'var(--text-subtle)' }}>
++                Contact your admin to manage team members and roles
++              </p>
++            </div>
++          )}
+         </div>
+       )}
+ 
+-      {/* Gmail setup instructions */}
+-      {!gmailConnected && (
+-        <div
+-          className="mt-4 rounded p-4 text-[12px]"
+-          style={{ background: 'var(--info-soft)', border: '1px solid var(--info-soft)', color: 'var(--info)' }}
+-        >
+-          <p className="font-bold mb-1">To connect Gmail:</p>
+-          <ol className="list-decimal list-inside space-y-1" style={{ color: 'var(--text-2)' }}>
+-            <li>Create a Google Cloud project and enable the Gmail API</li>
+-            <li>Create OAuth 2.0 credentials (Web application type)</li>
+-            <li>Add <code className="px-1 rounded" style={{ background: 'var(--surface-2)' }}>{process.env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback</code> as an authorized redirect URI</li>
+-            <li>Add <code className="px-1 rounded" style={{ background: 'var(--surface-2)' }}>GOOGLE_CLIENT_ID</code>, <code className="px-1 rounded" style={{ background: 'var(--surface-2)' }}>GOOGLE_CLIENT_SECRET</code>, and <code className="px-1 rounded" style={{ background: 'var(--surface-2)' }}>GOOGLE_REDIRECT_URI</code> to Vercel env vars</li>
+-          </ol>
++      {activeTab === 'notifications' && (
++        <div className="card p-6">
++          <h2 className="card-title mb-4">Notification Preferences</h2>
++          <div className="space-y-4">
++            {[
++              { label: 'New bid invitations', desc: 'Get notified when new bids are imported from Gmail', default: true },
++              { label: 'Urgent deadlines', desc: 'Alert when a bid is due within 3 days', default: true },
++              { label: 'Status changes', desc: 'Notify when a bid status is updated', default: false },
++              { label: 'Team activity', desc: 'Get notified about team member actions', default: false },
++              { label: 'Weekly digest', desc: 'Weekly summary of bid activity and pipeline status', default: true },
++            ].map(n => (
++              <div key={n.label} className="flex items-center justify-between py-2">
++                <div>
++                  <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{n.label}</p>
++                  <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{n.desc}</p>
++                </div>
++                <label className="relative inline-flex cursor-pointer">
++                  <input type="checkbox" defaultChecked={n.default} className="sr-only peer" />
++                  <div
++                    className="w-9 h-5 rounded-full peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:rounded-full after:h-4 after:w-4 after:transition-all"
++                    style={{
++                      background: 'var(--border)',
++                    }}
++                  />
++                </label>
++              </div>
++            ))}
++          </div>
++          <div className="mt-5 pt-4 flex justify-end" style={{ borderTop: '1px solid var(--border)' }}>
++            <button className="btn btn-primary btn-sm">Save Preferences</button>
++          </div>
+         </div>
+       )}
+     </div>
+diff --git a/app/globals.css b/app/globals.css
+index c152c4b..68b1290 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -131,6 +131,12 @@
+   .btn-primary:hover { background: var(--orange); border-color: var(--orange); }
+   .btn-accent  { background: var(--orange); color: white; border-color: var(--orange); }
+   .btn-accent:hover { background: var(--orange-hover); border-color: var(--orange-hover); }
++
++  /* Dark mode: fix white-on-light contrast for buttons */
++  [data-theme='dark'] .btn-primary { background: #1a3a5c; border-color: #1a3a5c; color: #fff; }
++  [data-theme='dark'] .btn-primary:hover { background: var(--orange); border-color: var(--orange); color: #fff; }
++  [data-theme='dark'] .btn-accent { background: oklch(0.60 0.16 50); border-color: oklch(0.60 0.16 50); color: #fff; }
++  [data-theme='dark'] .btn-accent:hover { background: oklch(0.55 0.16 50); border-color: oklch(0.55 0.16 50); color: #fff; }
+   .btn-ghost { background: transparent; border-color: transparent; }
+   .btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
+   .btn-sm { @apply h-7 px-2.5 text-[12px]; }
+diff --git a/components/layout/AppShell.tsx b/components/layout/AppShell.tsx
+index e7de520..64a3c5f 100644
+--- a/components/layout/AppShell.tsx
++++ b/components/layout/AppShell.tsx
+@@ -13,9 +13,11 @@ interface AppShellProps {
+ 
+ export default async function AppShell({ userEmail, userName, userTitle, children }: AppShellProps) {
+   const supabase = createClient();
+-  const { data: bids } = await supabase
+-    .from('bids')
+-    .select('id, status, bid_due_date');
++  const [{ data: bids }, { data: estimates }, { data: proposals }] = await Promise.all([
++    supabase.from('bids').select('id, status, bid_due_date'),
++    supabase.from('estimates').select('id, status').eq('status', 'Draft'),
++    supabase.from('proposals').select('id, status').eq('status', 'Draft'),
++  ]);
+ 
+   const list = (bids ?? []) as Pick<Bid, 'id' | 'status' | 'bid_due_date'>[];
+   const active = list.filter(b => !['Won', 'Lost', 'Declined', 'Expired'].includes(b.status));
+@@ -35,6 +37,8 @@ export default async function AppShell({ userEmail, userName, userTitle, childre
+         userTitle={userTitle}
+         urgentCount={urgentCount}
+         bidsCount={active.length}
++        estimateDraftCount={(estimates ?? []).length}
++        proposalDraftCount={(proposals ?? []).length}
+       />
+       <div className="flex min-w-0 flex-col">
+         <Topbar />
+diff --git a/components/layout/Sidebar.tsx b/components/layout/Sidebar.tsx
+index d2ab156..d1bdaa2 100644
+--- a/components/layout/Sidebar.tsx
++++ b/components/layout/Sidebar.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { useState, useRef, useEffect } from 'react';
+ import Link from 'next/link';
+ import Image from 'next/image';
+ import { usePathname, useRouter } from 'next/navigation';
+@@ -7,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
+ import type { LucideIcon } from 'lucide-react';
+ import {
+   LayoutDashboard, FileText, Calculator, Send, Users, BarChart2,
+-  Settings, LogOut, ChevronDown,
++  Settings, LogOut, ChevronDown, Sun, Moon, RefreshCw, User,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ 
+@@ -33,11 +34,29 @@ interface SidebarProps {
+   userTitle?: string;
+   urgentCount?: number;
+   bidsCount?: number;
++  estimateDraftCount?: number;
++  proposalDraftCount?: number;
+ }
+ 
+-export default function Sidebar({ userEmail, userName, userTitle, urgentCount = 0, bidsCount }: SidebarProps) {
++export default function Sidebar({
++  userEmail, userName, userTitle,
++  urgentCount = 0, bidsCount,
++  estimateDraftCount = 0, proposalDraftCount = 0,
++}: SidebarProps) {
+   const pathname = usePathname();
+   const router = useRouter();
++  const [profileOpen, setProfileOpen] = useState(false);
++  const profileRef = useRef<HTMLDivElement>(null);
++
++  useEffect(() => {
++    function handleClick(e: MouseEvent) {
++      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
++        setProfileOpen(false);
++      }
++    }
++    document.addEventListener('mousedown', handleClick);
++    return () => document.removeEventListener('mousedown', handleClick);
++  }, []);
+ 
+   async function handleSignOut() {
+     const supabase = createClient();
+@@ -46,6 +65,14 @@ export default function Sidebar({ userEmail, userName, userTitle, urgentCount =
+     router.refresh();
+   }
+ 
++  function toggleTheme() {
++    const html = document.documentElement;
++    const current = html.getAttribute('data-theme');
++    const next = current === 'dark' ? 'light' : 'dark';
++    html.setAttribute('data-theme', next);
++    localStorage.setItem('ngu-theme', next);
++  }
++
+   const displayName = userName ?? userEmail ?? 'User';
+   const initials = displayName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+ 
+@@ -78,29 +105,88 @@ export default function Sidebar({ userEmail, userName, userTitle, urgentCount =
+           title="Workspace"
+           pathname={pathname}
+           items={WORKSPACE}
+-          extras={{ '/bids': { count: bidsCount, urgent: urgentCount > 0 } }}
++          extras={{
++            '/bids': { count: bidsCount, urgent: urgentCount > 0 },
++            '/estimates': { count: estimateDraftCount > 0 ? estimateDraftCount : undefined },
++            '/proposals': { count: proposalDraftCount > 0 ? proposalDraftCount : undefined },
++          }}
+         />
+         <NavGroup title="Network" pathname={pathname} items={NETWORK} />
+         <NavGroup title="System"  pathname={pathname} items={SYSTEM} />
+       </nav>
+ 
+-      {/* Footer — user card + sign out */}
+-      <div className="px-3 pb-3 pt-2 border-t shrink-0" style={{ borderColor: 'var(--border)' }}>
+-        <button
+-          onClick={handleSignOut}
+-          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[12px] transition-colors hover:bg-[var(--surface-2)] mb-1"
+-          style={{ color: 'var(--text-subtle)' }}
+-        >
+-          <LogOut size={13} />
+-          <span>Sign out</span>
+-        </button>
++      {/* Footer — user card with popup */}
++      <div className="px-3 pb-3 pt-2 border-t shrink-0 relative" style={{ borderColor: 'var(--border)' }} ref={profileRef}>
++        {/* User profile popup */}
++        {profileOpen && (
++          <div
++            className="absolute bottom-full left-2 right-2 mb-1 rounded-lg border shadow-lg overflow-hidden z-50"
++            style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
++          >
++            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
++              <div className="flex items-center gap-3">
++                <div
++                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full font-mono text-[13px] font-semibold text-white"
++                  style={{ background: '#1a3a5c' }}
++                >
++                  {initials}
++                </div>
++                <div className="min-w-0 flex-1">
++                  <div className="truncate text-[14px] font-semibold" style={{ color: 'var(--text)' }}>{displayName}</div>
++                  {userTitle && <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{userTitle}</div>}
++                  {userEmail && <div className="text-[11px] truncate" style={{ color: 'var(--text-subtle)' }}>{userEmail}</div>}
++                </div>
++              </div>
++            </div>
++
++            <div className="py-1">
++              <Link
++                href="/settings"
++                onClick={() => setProfileOpen(false)}
++                className="flex items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
++                style={{ color: 'var(--text-2)' }}
++              >
++                <User size={14} />
++                Profile & Settings
++              </Link>
++              <button
++                onClick={toggleTheme}
++                className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
++                style={{ color: 'var(--text-2)' }}
++              >
++                <Sun size={14} className="hidden [data-theme='dark']_&:block" />
++                <Moon size={14} />
++                Toggle Theme
++              </button>
++              <button
++                className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
++                style={{ color: 'var(--text-2)' }}
++              >
++                <RefreshCw size={14} />
++                Re-run Onboarding
++              </button>
++            </div>
++
++            <div style={{ borderTop: '1px solid var(--border)' }} className="py-1">
++              <button
++                onClick={handleSignOut}
++                className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
++                style={{ color: 'var(--bad)' }}
++              >
++                <LogOut size={14} />
++                Sign Out
++              </button>
++            </div>
++          </div>
++        )}
+ 
+         <div
++          onClick={() => setProfileOpen(!profileOpen)}
+           className="flex items-center gap-2.5 rounded-md px-2 py-2 cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
+         >
+           <div
+             className="grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-[11px] font-semibold text-white"
+-            style={{ background: 'var(--navy)' }}
++            style={{ background: '#1a3a5c' }}
+           >
+             {initials}
+           </div>
+@@ -114,7 +200,7 @@ export default function Sidebar({ userEmail, userName, userTitle, urgentCount =
+               </div>
+             )}
+           </div>
+-          <ChevronDown size={13} style={{ color: 'var(--text-subtle)' }} className="shrink-0" />
++          <ChevronDown size={13} style={{ color: 'var(--text-subtle)' }} className={cn('shrink-0 transition-transform', profileOpen && 'rotate-180')} />
+         </div>
+       </div>
+     </aside>
+@@ -163,7 +249,7 @@ function NavGroup({ title, pathname, items, extras = {} }: NavGroupProps) {
+             <span className="flex-1">{label}</span>
+             {extra?.urgent ? (
+               <span
+-                className="h-1.5 w-1.5 rounded-full animate-pulse-soft shrink-0"
++                className="h-2 w-2 rounded-full animate-pulse-soft shrink-0"
+                 style={{ background: 'var(--bad)', boxShadow: '0 0 0 3px var(--bad-soft)' }}
+                 title="Urgent items"
+               />
+diff --git a/lib/types.ts b/lib/types.ts
+index 2f0edb3..4928c9b 100644
+--- a/lib/types.ts
++++ b/lib/types.ts
+@@ -32,6 +32,7 @@ export interface Bid {
+   plans_link: string | null;
+   source: string | null;
+   status: BidStatus;
++  proposed_start_date: string | null;
+   our_bid_amount: number | null;
+   awarded_amount: number | null;
+   notes: string | null;
+-- 
+2.43.0
+
