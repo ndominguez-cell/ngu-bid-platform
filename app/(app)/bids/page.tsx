@@ -17,7 +17,7 @@ const TERMINAL_STATUSES: BidStatus[] = ['Won', 'Lost', 'Declined'];
 // "Open" = still available to act on: not expired, not yet decided.
 const OPEN_STATUSES: BidStatus[] = ['New', 'Reviewing', 'Active', 'Submitted'];
 
-const SORT_KEYS = ['bid_due_date', 'days_left', 'project_name', 'location', 'gc_name', 'our_bid_amount', 'status'] as const;
+const SORT_KEYS = ['bid_due_date', 'days_left', 'project_name', 'location', 'gc_name', 'proposed_start_date', 'our_bid_amount', 'status'] as const;
 type SortKey = typeof SORT_KEYS[number];
 
 async function getBids(): Promise<Bid[]> {
@@ -97,6 +97,11 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
       }
       case 'gc_name':
         return (a.bid.gc_name ?? '').localeCompare(b.bid.gc_name ?? '') * dir;
+      case 'proposed_start_date': {
+        const av = a.bid.proposed_start_date ?? '9999-99-99';
+        const bv = b.bid.proposed_start_date ?? '9999-99-99';
+        return av.localeCompare(bv) * dir;
+      }
       case 'status':
         return a.status.localeCompare(b.status) * dir;
       case 'bid_due_date':
@@ -190,6 +195,7 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
                 <SortTh sortKey="gc_name" current={sortKey} dir={sortDir} href={sortHref('gc_name')}>GC</SortTh>
                 <SortTh sortKey="bid_due_date" current={sortKey} dir={sortDir} href={sortHref('bid_due_date')}>Bid Due</SortTh>
                 <SortTh sortKey="days_left" current={sortKey} dir={sortDir} href={sortHref('days_left')}>Days Left</SortTh>
+                <SortTh sortKey="proposed_start_date" current={sortKey} dir={sortDir} href={sortHref('proposed_start_date')}>Start Date</SortTh>
                 <Th>Trades</Th>
                 <SortTh sortKey="our_bid_amount" current={sortKey} dir={sortDir} href={sortHref('our_bid_amount')} className="text-right">Our Bid</SortTh>
                 <SortTh sortKey="status" current={sortKey} dir={sortDir} href={sortHref('status')}>Status</SortTh>
@@ -236,14 +242,27 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
                       )}
                     </Td>
                     <Td>
-                      <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
-                      {b.bid_due_time && (
-                        <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
-                          {b.bid_due_time}
-                        </div>
+                      {b.bid_due_date ? (
+                        <>
+                          <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
+                          {b.bid_due_time && (
+                            <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
+                              {b.bid_due_time}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[11px] italic" style={{ color: 'var(--text-subtle)' }}>No date</span>
                       )}
                     </Td>
                     <Td><UrgencyBadge days={d} /></Td>
+                    <Td>
+                      {b.proposed_start_date ? (
+                        <span className="mono text-[12px]">{formatDate(b.proposed_start_date, 'MMM d')}</span>
+                      ) : (
+                        <span className="text-[11px] italic" style={{ color: 'var(--text-subtle)' }}>TBD</span>
+                      )}
+                    </Td>
                     <Td className="max-w-[180px]">
                       <div
                         className="truncate text-[11.5px]"

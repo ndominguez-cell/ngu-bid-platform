@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BID_STATUSES, STATUS_COLORS } from '@/lib/utils';
+import { BID_STATUSES } from '@/lib/utils';
 import type { BidStatus } from '@/lib/types';
 
 export default function BidStatusUpdater({ bidId, currentStatus }: { bidId: string; currentStatus: BidStatus }) {
@@ -31,7 +31,8 @@ export default function BidStatusUpdater({ bidId, currentStatus }: { bidId: stri
       <select
         value={status}
         onChange={e => setStatus(e.target.value as BidStatus)}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c] transition-colors"
+        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
       >
         {BID_STATUSES.map(s => (
           <option key={s} value={s}>{s}</option>
@@ -40,9 +41,9 @@ export default function BidStatusUpdater({ bidId, currentStatus }: { bidId: stri
       <button
         onClick={handleSave}
         disabled={saving || status === currentStatus}
-        className="w-full bg-[#1a3a5c] hover:bg-[#e87722] text-white text-xs font-bold py-2 rounded-lg transition-colors disabled:opacity-40"
+        className="btn btn-primary w-full text-[12px] font-bold disabled:opacity-40"
       >
-        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Update Status'}
+        {saving ? 'Saving…' : saved ? 'Saved' : 'Update Status'}
       </button>
     </div>
   );

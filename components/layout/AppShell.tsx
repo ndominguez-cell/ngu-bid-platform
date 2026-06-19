@@ -13,9 +13,11 @@ interface AppShellProps {
 
 export default async function AppShell({ userEmail, userName, userTitle, children }: AppShellProps) {
   const supabase = createClient();
-  const { data: bids } = await supabase
-    .from('bids')
-    .select('id, status, bid_due_date');
+  const [{ data: bids }, { data: estimates }, { data: proposals }] = await Promise.all([
+    supabase.from('bids').select('id, status, bid_due_date'),
+    supabase.from('estimates').select('id, status').eq('status', 'Draft'),
+    supabase.from('proposals').select('id, status').eq('status', 'Draft'),
+  ]);
 
   const list = (bids ?? []) as Pick<Bid, 'id' | 'status' | 'bid_due_date'>[];
   const active = list.filter(b => !['Won', 'Lost', 'Declined', 'Expired'].includes(b.status));
@@ -35,6 +37,8 @@ export default async function AppShell({ userEmail, userName, userTitle, childre
         userTitle={userTitle}
         urgentCount={urgentCount}
         bidsCount={active.length}
+        estimateDraftCount={(estimates ?? []).length}
+        proposalDraftCount={(proposals ?? []).length}
       />
       <div className="flex min-w-0 flex-col">
         <Topbar />

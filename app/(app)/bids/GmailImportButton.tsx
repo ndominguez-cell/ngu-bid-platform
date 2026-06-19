@@ -31,7 +31,10 @@ export default function GmailImportButton() {
   return (
     <div className="flex items-center gap-2">
       {message && (
-        <span className={`text-xs font-medium flex items-center gap-1 ${state === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+        <span
+          className="text-xs font-medium flex items-center gap-1"
+          style={{ color: state === 'error' ? 'var(--bad)' : 'var(--ok)' }}
+        >
           {state === 'error' ? <AlertCircle size={12} /> : <CheckCircle2 size={12} />}
           {message}
         </span>
@@ -39,7 +42,7 @@ export default function GmailImportButton() {
       <button
         onClick={handleImport}
         disabled={state === 'loading'}
-        className="flex items-center gap-1.5 border border-gray-200 text-gray-600 hover:border-[#1a3a5c] hover:text-[#1a3a5c] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+        className="btn btn-sm flex items-center gap-1.5 disabled:opacity-60"
         title="Scan Gmail inbox for new bid invitations"
       >
         {state === 'loading' ? (

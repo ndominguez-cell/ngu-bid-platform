@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -7,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, FileText, Calculator, Send, Users, BarChart2,
-  Settings, LogOut, ChevronDown,
+  Settings, LogOut, ChevronDown, Sun, Moon, RefreshCw, User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -33,17 +34,43 @@ interface SidebarProps {
   userTitle?: string;
   urgentCount?: number;
   bidsCount?: number;
+  estimateDraftCount?: number;
+  proposalDraftCount?: number;
 }
 
-export default function Sidebar({ userEmail, userName, userTitle, urgentCount = 0, bidsCount }: SidebarProps) {
+export default function Sidebar({
+  userEmail, userName, userTitle,
+  urgentCount = 0, bidsCount,
+  estimateDraftCount = 0, proposalDraftCount = 0,
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
+  }
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('ngu-theme', next);
   }
 
   const displayName = userName ?? userEmail ?? 'User';
@@ -78,29 +105,88 @@ export default function Sidebar({ userEmail, userName, userTitle, urgentCount = 
           title="Workspace"
           pathname={pathname}
           items={WORKSPACE}
-          extras={{ '/bids': { count: bidsCount, urgent: urgentCount > 0 } }}
+          extras={{
+            '/bids': { count: bidsCount, urgent: urgentCount > 0 },
+            '/estimates': { count: estimateDraftCount > 0 ? estimateDraftCount : undefined },
+            '/proposals': { count: proposalDraftCount > 0 ? proposalDraftCount : undefined },
+          }}
         />
         <NavGroup title="Network" pathname={pathname} items={NETWORK} />
         <NavGroup title="System"  pathname={pathname} items={SYSTEM} />
       </nav>
 
-      {/* Footer — user card + sign out */}
-      <div className="px-3 pb-3 pt-2 border-t shrink-0" style={{ borderColor: 'var(--border)' }}>
-        <button
-          onClick={handleSignOut}
-          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[12px] transition-colors hover:bg-[var(--surface-2)] mb-1"
-          style={{ color: 'var(--text-subtle)' }}
-        >
-          <LogOut size={13} />
-          <span>Sign out</span>
-        </button>
+      {/* Footer — user card with popup */}
+      <div className="px-3 pb-3 pt-2 border-t shrink-0 relative" style={{ borderColor: 'var(--border)' }} ref={profileRef}>
+        {/* User profile popup */}
+        {profileOpen && (
+          <div
+            className="absolute bottom-full left-2 right-2 mb-1 rounded-lg border shadow-lg overflow-hidden z-50"
+            style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+          >
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-3">
+                <div
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full font-mono text-[13px] font-semibold text-white"
+                  style={{ background: '#1a3a5c' }}
+                >
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-semibold" style={{ color: 'var(--text)' }}>{displayName}</div>
+                  {userTitle && <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{userTitle}</div>}
+                  {userEmail && <div className="text-[11px] truncate" style={{ color: 'var(--text-subtle)' }}>{userEmail}</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="py-1">
+              <Link
+                href="/settings"
+                onClick={() => setProfileOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
+                style={{ color: 'var(--text-2)' }}
+              >
+                <User size={14} />
+                Profile & Settings
+              </Link>
+              <button
+                onClick={toggleTheme}
+                className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
+                style={{ color: 'var(--text-2)' }}
+              >
+                <Sun size={14} className="hidden [data-theme='dark']_&:block" />
+                <Moon size={14} />
+                Toggle Theme
+              </button>
+              <button
+                className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
+                style={{ color: 'var(--text-2)' }}
+              >
+                <RefreshCw size={14} />
+                Re-run Onboarding
+              </button>
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border)' }} className="py-1">
+              <button
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
+                style={{ color: 'var(--bad)' }}
+              >
+                <LogOut size={14} />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
+          onClick={() => setProfileOpen(!profileOpen)}
           className="flex items-center gap-2.5 rounded-md px-2 py-2 cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
         >
           <div
             className="grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-[11px] font-semibold text-white"
-            style={{ background: 'var(--navy)' }}
+            style={{ background: '#1a3a5c' }}
           >
             {initials}
           </div>
@@ -114,7 +200,7 @@ export default function Sidebar({ userEmail, userName, userTitle, urgentCount = 
               </div>
             )}
           </div>
-          <ChevronDown size={13} style={{ color: 'var(--text-subtle)' }} className="shrink-0" />
+          <ChevronDown size={13} style={{ color: 'var(--text-subtle)' }} className={cn('shrink-0 transition-transform', profileOpen && 'rotate-180')} />
         </div>
       </div>
     </aside>
@@ -163,7 +249,7 @@ function NavGroup({ title, pathname, items, extras = {} }: NavGroupProps) {
             <span className="flex-1">{label}</span>
             {extra?.urgent ? (
               <span
-                className="h-1.5 w-1.5 rounded-full animate-pulse-soft shrink-0"
+                className="h-2 w-2 rounded-full animate-pulse-soft shrink-0"
                 style={{ background: 'var(--bad)', boxShadow: '0 0 0 3px var(--bad-soft)' }}
                 title="Urgent items"
               />
