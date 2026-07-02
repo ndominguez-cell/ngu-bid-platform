@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import {
   anthropic,
   loadPlanDocuments,
@@ -22,6 +23,9 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   const supabase = createServiceClient();
+
+  const limited = await enforceRateLimit(supabase, { userId: auth.user.id, workspaceId: auth.workspaceId, route: 'estimates', rules: RATE_PRESETS.heavyAI });
+  if (limited) return limited;
 
   try {
     const body = await req.json();

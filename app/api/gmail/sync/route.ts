@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import { getValidAccessToken, gmailFetch } from '@/lib/gmail';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -11,12 +12,17 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
   const user = auth.user;
   const workspaceId = auth.workspaceId;
 
+  const serviceClient = createServiceClient();
+  const limited = await enforceRateLimit(serviceClient, { userId: user.id, workspaceId, route: 'gmail-sync', rules: RATE_PRESETS.gmailScan });
+  if (limited) return limited;
+
   try {
     const accessToken = await getValidAccessToken(user.id);
-    const serviceClient = createServiceClient();
 
     // List recent bid-related emails
     const listRes = await gmailFetch(

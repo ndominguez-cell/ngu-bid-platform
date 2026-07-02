@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import { isValidEmail } from '@/lib/validation';
 import { getValidAccessToken, gmailFetch, buildMimeMessage } from '@/lib/gmail';
 
@@ -12,6 +13,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const user = auth.user;
 
   const serviceClient = createServiceClient();
+
+  const limited = await enforceRateLimit(serviceClient, { userId: user.id, workspaceId: auth.workspaceId, route: 'proposal-send', rules: RATE_PRESETS.send });
+  if (limited) return limited;
 
   const { data: proposal, error: propErr } = await serviceClient
     .from('proposals')

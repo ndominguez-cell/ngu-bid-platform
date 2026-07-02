@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
@@ -31,6 +32,10 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   const supabase = createServiceClient();
+
+  const limited = await enforceRateLimit(supabase, { userId: auth.user.id, workspaceId: auth.workspaceId, route: 'proposal-draft', rules: RATE_PRESETS.lightAI });
+  if (limited) return limited;
+
   const { bid_id, estimate_id } = await req.json();
 
   if (!bid_id) return NextResponse.json({ error: 'bid_id required' }, { status: 400 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import { safeHttpUrl } from '@/lib/validation';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -83,6 +84,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (denied) return denied;
 
   const serviceClient = createServiceClient();
+
+  const limited = await enforceRateLimit(serviceClient, { userId: auth.user.id, workspaceId: auth.workspaceId, route: 'find-plans', rules: RATE_PRESETS.heavyAI });
+  if (limited) return limited;
+
   const { data: bid, error: bidError } = await serviceClient
     .from('bids')
     .select('*')

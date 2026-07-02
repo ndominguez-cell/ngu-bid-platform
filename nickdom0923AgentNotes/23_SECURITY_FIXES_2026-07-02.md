@@ -71,10 +71,21 @@ failure. Needs the new `'Sending'` value in the proposals status constraint
 (in the migration); if the migration isn't applied the code falls back to the
 old non-atomic guard instead of blocking sends.
 
+## M5 — rate limiting / cost controls (RESOLVED)
+Added `lib/ratelimit.ts` (`enforceRateLimit`) backed by a new `ai_rate_limits`
+table (migration `20260702140000_ai_rate_limits.sql`, service-role only). It's a
+per-user, per-route sliding window: each route passes a burst rule (debounce
+double-clicks) + a sustained hourly cap. Fails OPEN if the table is missing so it
+never breaks the product before the migration is applied. Wired into every AI
+route:
+- estimates create / reanalyze / find-plans → `heavyAI` (1 per 8s, 15/hour)
+- gmail detect-bids / sync → `gmailScan` (1 per 15s, 12/hour) + writer guard added
+- proposal draft → `lightAI` (1 per 4s, 40/hour)
+- proposal send → `send` (1 per 3s, 80/hour)
+Returns 429 with a `Retry-After` header when exceeded. Tune the presets in
+`lib/ratelimit.ts` if the caps are too tight/loose for real usage.
+
 ## Deferred (larger scope, noted for follow-up)
-- M5 — rate limiting / cost controls on the AI routes (now the most expensive
-  calls after the Opus estimator work). Recommend Upstash Ratelimit or a
-  `bid_activity`-based cooldown + an in-flight guard.
 - M6 — team listing still pages only the first 50 project users via
   `auth.admin.listUsers()`; fine until >50 users, then needs pagination.
 - L5 — `nextBidId` race / lexicographic sort past BID-YYYY-1000 (use a sequence).
