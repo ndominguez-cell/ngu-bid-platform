@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
         .select('id')
         .eq('gmail_thread_id', threadId)
         .eq('workspace_id', workspaceId)
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (existing) continue;
 
       // Use Claude Haiku to extract contact info

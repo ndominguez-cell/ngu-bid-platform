@@ -57,3 +57,24 @@ export async function requireUser() {
     error: null,
   };
 }
+
+// Roles allowed to create/modify data. `viewer` is read-only. Authority lives in
+// workspace_members.role (returned as auth.role), NOT the global profiles.role.
+export const WRITER_ROLES = ['owner', 'admin', 'estimator'];
+export const ADMIN_ROLES = ['owner', 'admin'];
+
+/** 403 response if the caller's workspace role may not write, else null. */
+export function forbidNonWriter(role: string | null): NextResponse | null {
+  if (!role || !WRITER_ROLES.includes(role)) {
+    return NextResponse.json({ error: 'Your role is read-only' }, { status: 403 });
+  }
+  return null;
+}
+
+/** 403 response if the caller is not a workspace admin/owner, else null. */
+export function forbidNonAdmin(role: string | null): NextResponse | null {
+  if (!role || !ADMIN_ROLES.includes(role)) {
+    return NextResponse.json({ error: 'Admin only' }, { status: 403 });
+  }
+  return null;
+}

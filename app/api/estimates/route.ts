@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
 import {
   anthropic,
   loadPlanDocuments,
@@ -18,6 +18,8 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const supabase = createServiceClient();
 

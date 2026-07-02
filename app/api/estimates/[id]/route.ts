@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const supabase = createServiceClient();
   const { line_items, markup_pct, status, notes } = await req.json();

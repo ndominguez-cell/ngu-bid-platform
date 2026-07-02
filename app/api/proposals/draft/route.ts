@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
@@ -27,6 +27,8 @@ Return ONLY the email text, starting with "SUBJECT: ". No preamble, no markdown,
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const supabase = createServiceClient();
   const { bid_id, estimate_id } = await req.json();

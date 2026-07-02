@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth';
 import { getValidAccessToken, gmailFetch } from '@/lib/gmail';
+import { safeHttpUrl, isValidEmail } from '@/lib/validation';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 120;
@@ -93,7 +94,8 @@ export async function POST(req: NextRequest) {
         .select('id')
         .eq('thread_id', threadId)
         .eq('workspace_id', workspaceId)
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (existingBid) { skipped++; continue; }
 
       const body = extractBody(msgData.payload);
@@ -156,14 +158,17 @@ Return ONLY the JSON object, no other text.`;
         city: bidData.city as string | null,
         state: (bidData.state as string) || 'TX',
         gc_name: bidData.gc_name as string | null,
-        gc_email: bidData.gc_email as string | null,
+        // Untrusted (extracted from inbound email): validate before storing —
+        // gc_email later becomes an outbound proposal recipient, and plans_link
+        // is rendered as a clickable link in our own UI.
+        gc_email: isValidEmail(bidData.gc_email) ? (bidData.gc_email as string).trim() : null,
         gc_contact_name: bidData.gc_contact_name as string | null,
         gc_contact_phone: bidData.gc_contact_phone as string | null,
         bid_due_date: bidData.bid_due_date as string | null,
         bid_due_time: bidData.bid_due_time as string | null,
         scope: bidData.scope as string | null,
         trades: (bidData.trades as string[]) ?? [],
-        plans_link: bidData.plans_link as string | null,
+        plans_link: safeHttpUrl(bidData.plans_link),
         source: (bidData.source as string) || 'Gmail',
         status: 'New',
       });

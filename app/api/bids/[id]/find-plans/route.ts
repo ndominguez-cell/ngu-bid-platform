@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { safeHttpUrl } from '@/lib/validation';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 300;
@@ -78,6 +79,8 @@ After searching, respond with ONLY a valid JSON object (no markdown, no commenta
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const serviceClient = createServiceClient();
   const { data: bid, error: bidError } = await serviceClient
@@ -168,11 +171,14 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
 
     const report = JSON.parse(match[0]);
 
-    // Auto-save a high-confidence plans URL back to the bid if not already set
-    if (report.plans_url && !bid.plans_link && report.confidence === 'high') {
+    // Auto-save a high-confidence plans URL back to the bid if not already set.
+    // The URL comes from the model + web search, so validate the scheme before
+    // storing (it will be rendered as a clickable link).
+    const safeUrl = safeHttpUrl(report.plans_url);
+    if (safeUrl && !bid.plans_link && report.confidence === 'high') {
       await serviceClient
         .from('bids')
-        .update({ plans_link: report.plans_url, updated_at: new Date().toISOString() })
+        .update({ plans_link: safeUrl, updated_at: new Date().toISOString() })
         .eq('id', params.id)
         .eq('workspace_id', auth.workspaceId);
       report.auto_saved = true;
