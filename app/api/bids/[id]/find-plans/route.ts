@@ -7,6 +7,12 @@ export const maxDuration = 300;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Current-generation model + web tools. web_search_20260209 / web_fetch_20260209
+// add dynamic filtering (results are filtered by code before hitting context) and
+// let the model actually OPEN candidate plan rooms to verify them, instead of
+// judging a document from a search snippet alone.
+const PLAN_FINDER_MODEL = 'claude-opus-4-8';
+
 const SYSTEM_PROMPT = `You are a construction bid plan document finder for NGU Construction, a site work and paving subcontractor in San Antonio, Texas.
 
 Your task: Given a construction bid invitation's details, search for publicly available plan documents (drawings, specifications, addenda) using the following 5-tier search ladder. Work top to bottom, stop as soon as you find a complete, verified package.
@@ -44,8 +50,9 @@ Texas-specific sources to always check for Texas public projects:
 - City and county .gov procurement pages
 - QuestCDN, PlanHub, BidSync free listing pages (project metadata without paywall)
 
-Verification: A document is confirmed only when it matches at least TWO anchors:
+Verification: Before reporting a document as "found", use the web_fetch tool to OPEN the candidate URL and confirm it actually contains the plans/specs (not just a listing page). A document is confirmed only when the fetched page matches at least TWO anchors:
 (project name OR bid number OR owner name OR site address OR engineer firm OR bid due date)
+Only report result "Found complete docs" or confidence "high" when you have fetched and verified the document. If you could only find it in search results but could not open it, report "Partial docs" or "Gated only" with lower confidence.
 
 Do NOT bypass paywalls or authentication. If docs are gated, report the plan room name and recommend the user request access.
 
@@ -109,10 +116,13 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
     while (attempts < maxAttempts) {
       attempts++;
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: PLAN_FINDER_MODEL,
         max_tokens: 2000,
         system: SYSTEM_PROMPT,
-        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
+        tools: [
+          { type: 'web_search_20260209' as const, name: 'web_search' },
+          { type: 'web_fetch_20260209' as const, name: 'web_fetch' },
+        ],
         messages,
       });
 
