@@ -4,7 +4,7 @@ import { requireUser } from '@/lib/auth';
 import {
   anthropic,
   loadPlanDocuments,
-  composeNotes,
+  buildTakeoff,
   ESTIMATOR_MODEL,
   ESTIMATOR_SYSTEM_PROMPT,
   ESTIMATE_SCHEMA,
@@ -97,7 +97,6 @@ GC notes: ${bid.notes || 'none'}`;
     const subtotal = lineItems.reduce((sum, item) => sum + (item.total || 0), 0);
     const markup = typeof ai.markup_pct === 'number' ? ai.markup_pct : 10;
     const totalAmount = Math.round(subtotal * (1 + markup / 100));
-    const notes = composeNotes(ai, plans);
 
     const { data: estimate, error: estError } = await supabase
       .from('estimates')
@@ -108,7 +107,6 @@ GC notes: ${bid.notes || 'none'}`;
         status: 'Draft',
         total_amount: totalAmount,
         markup_pct: markup,
-        notes,
         ai_summary: ai.ai_summary || null,
         line_items: lineItems,
       })
@@ -116,6 +114,16 @@ GC notes: ${bid.notes || 'none'}`;
       .single();
 
     if (estError) return NextResponse.json({ error: estError.message }, { status: 500 });
+
+    // Structured takeoff metadata (best-effort: never fails estimate creation if
+    // the takeoff column migration has not been applied yet).
+    const takeoff = buildTakeoff(ai, plans, new Date().toISOString());
+    const { error: takeoffErr } = await supabase
+      .from('estimates')
+      .update({ takeoff })
+      .eq('id', estimate.id)
+      .eq('workspace_id', auth.workspaceId);
+    if (takeoffErr) console.error('[estimates] takeoff update failed (run the takeoff migration):', takeoffErr.message);
 
     // Record only the documents that were actually analyzed.
     for (let i = 0; i < (storage_paths as string[]).length; i++) {

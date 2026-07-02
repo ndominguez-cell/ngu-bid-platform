@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft, Download, Sparkles, Send } from 'lucide-react';
+import { ArrowLeft, Download, Sparkles, Send, FileCheck2, FileX2, AlertTriangle, ListChecks, Ban } from 'lucide-react';
 import EstimateEditor from './EstimateEditor';
 import EstimateUploadButton from './EstimateUploadButton';
 
@@ -34,7 +34,15 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
     markup_pct: number;
     notes: string | null;
     ai_summary: string | null;
-    line_items: Array<{ trade: string; description: string; qty: number; unit: string; unit_price: number; total: number }>;
+    line_items: Array<{ trade: string; description: string; qty: number; unit: string; unit_price: number; total: number; basis?: string }>;
+    takeoff?: {
+      confidence?: 'high' | 'medium' | 'low' | null;
+      assumptions?: string[];
+      exclusions?: string[];
+      missing_documents?: string[];
+      documents_reviewed?: string[];
+      documents_skipped?: string[];
+    } | null;
     bid_id: string | null;
     created_at: string;
     bids: { project_name: string; city?: string; state?: string; gc_name?: string } | null;
@@ -42,6 +50,21 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
 
   const statusStyle = STATUS_STYLES[est.status] ?? STATUS_STYLES.Draft;
   const shortId = est.id.slice(0, 8).toUpperCase();
+
+  const takeoff = est.takeoff ?? null;
+  const hasTakeoffDetail = !!takeoff && (
+    !!takeoff.confidence ||
+    (takeoff.documents_reviewed?.length ?? 0) > 0 ||
+    (takeoff.documents_skipped?.length ?? 0) > 0 ||
+    (takeoff.assumptions?.length ?? 0) > 0 ||
+    (takeoff.exclusions?.length ?? 0) > 0 ||
+    (takeoff.missing_documents?.length ?? 0) > 0
+  );
+  const CONFIDENCE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+    high:   { bg: 'var(--ok-soft)',   color: 'var(--ok)',   label: 'High confidence' },
+    medium: { bg: 'var(--warn-soft)', color: 'var(--warn)', label: 'Medium confidence' },
+    low:    { bg: 'var(--bad-soft, var(--warn-soft))', color: 'var(--bad)', label: 'Low confidence' },
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -142,6 +165,50 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
         </div>
       )}
 
+      {/* Takeoff quality — how much to trust the AI numbers */}
+      {hasTakeoffDetail && takeoff && (
+        <div className="card p-4 mb-5">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 className="card-title">Takeoff Quality</h2>
+            {takeoff.confidence && (
+              <span
+                className="text-[11px] font-semibold px-2 py-0.5 rounded"
+                style={{
+                  background: (CONFIDENCE_STYLE[takeoff.confidence] ?? CONFIDENCE_STYLE.medium).bg,
+                  color: (CONFIDENCE_STYLE[takeoff.confidence] ?? CONFIDENCE_STYLE.medium).color,
+                }}
+              >
+                {(CONFIDENCE_STYLE[takeoff.confidence] ?? CONFIDENCE_STYLE.medium).label}
+              </span>
+            )}
+          </div>
+
+          {(takeoff.confidence === 'low' || (takeoff.missing_documents?.length ?? 0) > 0) && (
+            <p className="text-[12px] mb-3" style={{ color: 'var(--text-muted)' }}>
+              Review every quantity against the plans before submitting — the AI flagged gaps below.
+            </p>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4 text-[13px]">
+            {(takeoff.documents_reviewed?.length ?? 0) > 0 && (
+              <TakeoffList icon={<FileCheck2 size={13} />} title="Documents analyzed" color="var(--ok)" items={takeoff.documents_reviewed!} />
+            )}
+            {(takeoff.documents_skipped?.length ?? 0) > 0 && (
+              <TakeoffList icon={<FileX2 size={13} />} title="NOT analyzed" color="var(--warn)" items={takeoff.documents_skipped!} />
+            )}
+            {(takeoff.missing_documents?.length ?? 0) > 0 && (
+              <TakeoffList icon={<AlertTriangle size={13} />} title="Missing / needs verification" color="var(--bad)" items={takeoff.missing_documents!} />
+            )}
+            {(takeoff.assumptions?.length ?? 0) > 0 && (
+              <TakeoffList icon={<ListChecks size={13} />} title="Assumptions" color="var(--info)" items={takeoff.assumptions!} />
+            )}
+            {(takeoff.exclusions?.length ?? 0) > 0 && (
+              <TakeoffList icon={<Ban size={13} />} title="Exclusions" color="var(--text-muted)" items={takeoff.exclusions!} />
+            )}
+          </div>
+        </div>
+      )}
+
       <EstimateEditor
         estimateId={est.id}
         initialLineItems={est.line_items ?? []}
@@ -150,6 +217,25 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
         initialNotes={est.notes}
         bidId={est.bid_id}
       />
+    </div>
+  );
+}
+
+function TakeoffList({ icon, title, color, items }: { icon: React.ReactNode; title: string; color: string; items: string[] }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-1.5 label-mono" style={{ color }}>
+        {icon}
+        {title}
+      </div>
+      <ul className="space-y-1">
+        {items.map((it, i) => (
+          <li key={i} className="leading-snug pl-3 relative" style={{ color: 'var(--text)' }}>
+            <span className="absolute left-0 top-1.5 h-1 w-1 rounded-full" style={{ background: color }} />
+            {it}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

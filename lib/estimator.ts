@@ -171,19 +171,29 @@ export interface EstimateAI {
   missing_documents: string[];
 }
 
-/**
- * Fold the structured scope hygiene fields plus a record of which documents
- * were actually analyzed into the free-text notes stored on the estimate, so a
- * human reviewer sees confidence, exclusions, and any gaps at a glance.
- */
-export function composeNotes(ai: EstimateAI, plans: LoadedPlans, priorNotes?: string | null): string {
-  const parts: string[] = [];
-  if (priorNotes) parts.push(priorNotes.trim());
-  parts.push(`AI confidence: ${ai.confidence.toUpperCase()}`);
-  parts.push(`Documents analyzed: ${plans.reviewed.length ? plans.reviewed.join(', ') : 'none'}`);
-  if (plans.skipped.length) parts.push(`NOT analyzed: ${plans.skipped.join('; ')}`);
-  if (ai.assumptions.length) parts.push(`Assumptions:\n- ${ai.assumptions.join('\n- ')}`);
-  if (ai.exclusions.length) parts.push(`Exclusions:\n- ${ai.exclusions.join('\n- ')}`);
-  if (ai.missing_documents.length) parts.push(`Missing / needs verification:\n- ${ai.missing_documents.join('\n- ')}`);
-  return parts.join('\n\n');
+// Structured takeoff metadata, stored in the estimates.takeoff jsonb column and
+// rendered in the UI so a reviewer sees confidence, gaps, and which documents
+// were actually analyzed — kept separate from the user-editable `notes` field.
+export interface TakeoffMeta {
+  confidence: 'high' | 'medium' | 'low' | null;
+  assumptions: string[];
+  exclusions: string[];
+  missing_documents: string[];
+  documents_reviewed: string[];
+  documents_skipped: string[];
+  analyzed_at: string;
+}
+
+const dedupe = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
+
+export function buildTakeoff(ai: EstimateAI, plans: LoadedPlans, analyzedAt: string, prev?: Partial<TakeoffMeta> | null): TakeoffMeta {
+  return {
+    confidence: ai.confidence ?? null,
+    assumptions: dedupe([...(prev?.assumptions ?? []), ...(ai.assumptions ?? [])]),
+    exclusions: dedupe([...(prev?.exclusions ?? []), ...(ai.exclusions ?? [])]),
+    missing_documents: dedupe([...(prev?.missing_documents ?? []), ...(ai.missing_documents ?? [])]),
+    documents_reviewed: dedupe([...(prev?.documents_reviewed ?? []), ...plans.reviewed]),
+    documents_skipped: dedupe([...(prev?.documents_skipped ?? []), ...plans.skipped]),
+    analyzed_at: analyzedAt,
+  };
 }

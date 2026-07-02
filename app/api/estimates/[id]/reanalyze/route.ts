@@ -4,12 +4,13 @@ import { requireUser } from '@/lib/auth';
 import {
   anthropic,
   loadPlanDocuments,
-  composeNotes,
+  buildTakeoff,
   ESTIMATOR_MODEL,
   ESTIMATOR_SYSTEM_PROMPT,
   ESTIMATE_SCHEMA,
   FILES_BETA,
   type EstimateAI,
+  type TakeoffMeta,
 } from '@/lib/estimator';
 
 export const maxDuration = 300;
@@ -95,7 +96,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const subtotal = mergedItems.reduce((s, li) => s + (li.total || 0), 0);
     const totalAmount = Math.round(subtotal * (1 + markup / 100));
     const combinedSummary = [existing.ai_summary, ai.ai_summary].filter(Boolean).join(' | ');
-    const combinedNotes = composeNotes(ai, plans, existing.notes);
+
+    // Merge the new takeoff metadata with what was already recorded.
+    const takeoff = buildTakeoff(ai, plans, new Date().toISOString(), existing.takeoff as Partial<TakeoffMeta> | null);
 
     const { data: updated, error: updateErr } = await supabase
       .from('estimates')
@@ -103,7 +106,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         line_items: mergedItems,
         total_amount: totalAmount,
         ai_summary: combinedSummary,
-        notes: combinedNotes,
       })
       .eq('id', params.id)
       .eq('workspace_id', auth.workspaceId)
@@ -111,6 +113,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .single();
 
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+
+    const { error: takeoffErr } = await supabase
+      .from('estimates')
+      .update({ takeoff })
+      .eq('id', params.id)
+      .eq('workspace_id', auth.workspaceId);
+    if (takeoffErr) console.error('[reanalyze] takeoff update failed (run the takeoff migration):', takeoffErr.message);
 
     for (let i = 0; i < storage_paths.length; i++) {
       const nm = file_names[i] ?? storage_paths[i].split('/').pop();
