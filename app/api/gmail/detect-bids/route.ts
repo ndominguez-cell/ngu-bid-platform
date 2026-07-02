@@ -36,7 +36,10 @@ function extractBody(payload: {
   return '';
 }
 
-// Generate next bid ID: BID-YYYY-NNN
+// Generate next bid ID: BID-YYYY-NNN. Takes the NUMERIC max of existing ids —
+// ordering by id text would rank BID-2026-1000 below BID-2026-999 and reissue a
+// colliding id. Callers must still handle a PK conflict on insert (concurrent
+// detect-bids runs can compute the same next id before either commits).
 async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>, workspaceId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `BID-${year}-`;
@@ -44,13 +47,13 @@ async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>, 
     .from('bids')
     .select('id')
     .eq('workspace_id', workspaceId)
-    .like('id', `${prefix}%`)
-    .order('id', { ascending: false })
-    .limit(1);
-  if (!data || data.length === 0) return `${prefix}001`;
-  const last = data[0].id as string;
-  const num = parseInt(last.replace(prefix, ''), 10);
-  return `${prefix}${String(num + 1).padStart(3, '0')}`;
+    .like('id', `${prefix}%`);
+  let max = 0;
+  for (const row of data ?? []) {
+    const n = parseInt(String(row.id).slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -151,12 +154,9 @@ Return ONLY the JSON object, no other text.`;
 
       if (!bidData.is_bid) { skipped++; continue; }
 
-      const bidId = await nextBidId(serviceClient, workspaceId);
       const emailDate = new Date(internalDate).toISOString().split('T')[0];
-
-      await serviceClient.from('bids').insert({
+      const bidRow = {
         workspace_id: workspaceId,
-        id: bidId,
         thread_id: threadId,
         email_received: emailDate,
         project_name: (bidData.project_name as string) || 'Untitled Project',
@@ -177,10 +177,23 @@ Return ONLY the JSON object, no other text.`;
         plans_link: safeHttpUrl(bidData.plans_link),
         source: (bidData.source as string) || 'Gmail',
         status: 'New',
-      });
+      };
+
+      // Insert with a fresh id, retrying on a primary-key collision so two
+      // concurrent runs can't drop a bid by reusing the same generated id.
+      let bidId: string | null = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const candidate = await nextBidId(serviceClient, workspaceId);
+        const { error: insErr } = await serviceClient.from('bids').insert({ ...bidRow, id: candidate });
+        if (!insErr) { bidId = candidate; break; }
+        if (insErr.code === '23505') continue; // id already taken — regenerate
+        console.error('[detect-bids] bid insert failed:', insErr.message);
+        break;
+      }
+      if (!bidId) { skipped++; continue; }
 
       // Also save the email as a conversation record
-      await serviceClient.from('conversations').insert({
+      const { error: convErr } = await serviceClient.from('conversations').insert({
         workspace_id: workspaceId,
         bid_id: bidId,
         gmail_thread_id: threadId,
@@ -189,6 +202,7 @@ Return ONLY the JSON object, no other text.`;
         direction: 'inbound',
         date: internalDate,
       });
+      if (convErr) console.error('[detect-bids] conversation insert failed:', convErr.message);
 
       detected++;
     }

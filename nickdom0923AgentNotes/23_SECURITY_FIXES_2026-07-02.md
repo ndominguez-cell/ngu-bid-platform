@@ -85,8 +85,29 @@ route:
 Returns 429 with a `Retry-After` header when exceeded. Tune the presets in
 `lib/ratelimit.ts` if the caps are too tight/loose for real usage.
 
-## Deferred (larger scope, noted for follow-up)
-- M6 — team listing still pages only the first 50 project users via
-  `auth.admin.listUsers()`; fine until >50 users, then needs pagination.
-- L5 — `nextBidId` race / lexicographic sort past BID-YYYY-1000 (use a sequence).
-- Token encryption at rest (H1 note) — pgsodium/Vault, eventual hardening.
+## M6 — team listing past 50 users (RESOLVED)
+`team` GET no longer pages `auth.admin.listUsers()` (first 50 project users only).
+It resolves each workspace member's auth record directly via
+`auth.admin.getUserById(id)`, so the list is correct regardless of project size.
+
+## L5 — bid ID race / sort (RESOLVED)
+`detect-bids`: `nextBidId` now takes the NUMERIC max of existing ids (text
+ordering ranked BID-2026-1000 below BID-2026-999 and reissued a colliding id).
+The insert runs in a retry loop that regenerates the id on a primary-key
+collision (Postgres 23505), so concurrent runs can't silently drop a bid. The
+conversation insert error is now checked/logged too.
+
+## Token encryption at rest (RESOLVED)
+`lib/crypto.ts` (AES-256-GCM, key derived from a new `TOKEN_ENC_KEY` env var).
+Google refresh/access tokens are encrypted on write (OAuth callback + refresh in
+`lib/gmail.ts`) and decrypted on read. Values are version-tagged (`enc:v1:`);
+anything without the tag is treated as legacy plaintext and passed through, so
+existing tokens keep working and get re-encrypted on next write. If
+`TOKEN_ENC_KEY` is unset it logs a warning and stores plaintext (no breakage).
+Set `TOKEN_ENC_KEY` in the environment (`openssl rand -base64 32`) to activate.
+This is defense-in-depth on top of the H1 column-grant fix. No DB migration.
+
+## Deferred (all note-21 findings now addressed)
+Nothing outstanding from the note-21 review. Possible future hardening:
+rotate `TOKEN_ENC_KEY` via a re-encrypt job; move to Supabase Vault/pgsodium if
+you prefer DB-managed keys over an app env var.

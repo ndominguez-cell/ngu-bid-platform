@@ -20,28 +20,31 @@ export async function GET() {
     .from('workspace_members')
     .select('user_id')
     .eq('workspace_id', auth.workspaceId);
-  const memberIds = new Set((members ?? []).map((m: { user_id: string }) => m.user_id));
-
-  const { data: users, error } = await serviceClient.auth.admin.listUsers();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id);
 
   const { data: profiles } = await serviceClient
     .from('profiles')
     .select('id, full_name, role, title, created_at')
-  .in('id', Array.from(memberIds));
-
+    .in('id', memberIds);
   const profileMap = Object.fromEntries((profiles ?? []).map((p: { id: string; full_name: string | null; role: string; title: string | null; created_at: string }) => [p.id, p]));
 
-  const team = users.users
-    .filter(u => memberIds.has(u.id))
-    .map(u => ({
-      id: u.id,
-      email: u.email,
-      full_name: profileMap[u.id]?.full_name ?? null,
-      title: profileMap[u.id]?.title ?? null,
-      role: (profileMap[u.id]?.role ?? 'estimator') as UserRole,
-      created_at: profileMap[u.id]?.created_at ?? u.created_at,
-    }));
+  // Look up each member's auth record directly by id. Previously this paged
+  // auth.admin.listUsers() (first 50 project users only), so members silently
+  // disappeared once the project grew past 50; getUserById is exact regardless.
+  const team = await Promise.all(
+    memberIds.map(async (id) => {
+      const { data: authUser } = await serviceClient.auth.admin.getUserById(id);
+      const u = authUser?.user;
+      return {
+        id,
+        email: u?.email ?? null,
+        full_name: profileMap[id]?.full_name ?? null,
+        title: profileMap[id]?.title ?? null,
+        role: (profileMap[id]?.role ?? 'estimator') as UserRole,
+        created_at: profileMap[id]?.created_at ?? u?.created_at ?? null,
+      };
+    })
+  );
 
   return NextResponse.json({ team });
 }
