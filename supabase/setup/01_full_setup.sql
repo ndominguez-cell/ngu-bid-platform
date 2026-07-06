@@ -81,6 +81,7 @@ create table if not exists bids (
   contact_id        uuid references contacts(id) on delete set null,
   bid_due_date      date,
   bid_due_time      text,
+  proposed_start_date date,
   submit_to         text,
   scope             text,
   trades            text[],
@@ -133,6 +134,7 @@ create table if not exists estimates (
   status       text check (status in ('Draft','In Review','Approved','Submitted','Archived')) default 'Draft',
   total_amount numeric(12,2),
   markup_pct   numeric(5,2) default 10.0,
+  margin_pct   numeric(5,2) default 8.0,
   notes        text,
   ai_summary   text,
   line_items   jsonb default '[]',
@@ -346,6 +348,8 @@ create table if not exists workspaces (
   id         uuid primary key default uuid_generate_v4(),
   name       text not null,
   settings   jsonb default '{}',
+  default_markup_pct numeric(5,2) not null default 10.0,
+  default_margin_pct numeric(5,2) not null default 8.0,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

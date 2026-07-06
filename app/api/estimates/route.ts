@@ -116,8 +116,18 @@ Use current Texas market rates (2025-2026). Only include trades NGU performs. Ex
       };
     }
 
+    // Start from workspace-wide estimating defaults
+    const { data: ws } = await supabase
+      .from('workspaces')
+      .select('default_markup_pct, default_margin_pct')
+      .eq('id', auth.workspaceId)
+      .maybeSingle();
+    const wsMarkup = Number(ws?.default_markup_pct ?? 10);
+    const wsMargin = Number(ws?.default_margin_pct ?? 8);
+
+    const markupPct = estimateData.markup_pct ?? wsMarkup;
     const subtotal = (estimateData.line_items ?? []).reduce((sum, item) => sum + (item.total || 0), 0);
-    const totalAmount = Math.round(subtotal * (1 + (estimateData.markup_pct ?? 10) / 100));
+    const totalAmount = Math.round(subtotal * (1 + markupPct / 100) * (1 + wsMargin / 100));
 
     const { data: estimate, error: estError } = await supabase
       .from('estimates')
@@ -127,7 +137,8 @@ Use current Texas market rates (2025-2026). Only include trades NGU performs. Ex
         name: name || `Estimate – ${new Date().toLocaleDateString()}`,
         status: 'Draft',
         total_amount: totalAmount,
-        markup_pct: estimateData.markup_pct ?? 10,
+        markup_pct: markupPct,
+        margin_pct: wsMargin,
         notes: estimateData.notes || null,
         ai_summary: estimateData.ai_summary || null,
         line_items: estimateData.line_items ?? [],

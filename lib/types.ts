@@ -96,6 +96,7 @@ export interface Estimate {
   status: EstimateStatus;
   total_amount: number | null;
   markup_pct: number;
+  margin_pct: number | null;
   notes: string | null;
   ai_summary: string | null;
   line_items: EstimateLineItem[];

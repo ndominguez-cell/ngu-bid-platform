@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Loader2, Info } from 'lucide-react';
 
 export default function SettingsTabs() {
@@ -8,14 +8,38 @@ export default function SettingsTabs() {
   const [defaultMargin, setDefaultMargin] = useState(8);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) {
+          setDefaultMarkup(data.default_markup_pct);
+          setDefaultMargin(data.default_margin_pct);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSave() {
     setSaving(true);
-    // In production: POST /api/settings
-    await new Promise(r => setTimeout(r, 800));
-    setSaved(true);
-    setSaving(false);
-    setTimeout(() => setSaved(false), 2000);
+    setError('');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_markup_pct: defaultMarkup, default_margin_pct: defaultMargin }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -129,6 +153,7 @@ export default function SettingsTabs() {
 
       {/* Save button */}
       <div className="flex items-center gap-3 justify-end">
+        {error && <span className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</span>}
         {saved && <span className="text-[12px] font-semibold" style={{ color: 'var(--ok)' }}>Settings saved</span>}
         <button
           onClick={handleSave}
