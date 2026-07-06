@@ -8,12 +8,15 @@ export const maxDuration = 120;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Fetch the plain-text body from a Gmail message payload
-function extractBody(payload: {
+interface GmailPart {
   mimeType?: string;
-  body?: { data?: string };
-  parts?: { mimeType?: string; body?: { data?: string } }[];
-}): string {
+  filename?: string;
+  body?: { data?: string; attachmentId?: string; size?: number };
+  parts?: GmailPart[];
+}
+
+// Fetch the plain-text body from a Gmail message payload
+function extractBody(payload: GmailPart): string {
   if (!payload) return '';
   if (payload.mimeType === 'text/plain' && payload.body?.data) {
     return Buffer.from(payload.body.data, 'base64').toString('utf-8');
@@ -24,14 +27,46 @@ function extractBody(payload: {
         return Buffer.from(part.body.data, 'base64').toString('utf-8');
       }
     }
-    // Fallback: first part with any body
+    // Recurse into nested multiparts, then fall back to any body
     for (const part of payload.parts) {
-      if (part.body?.data) {
-        return Buffer.from(part.body.data, 'base64').toString('utf-8');
-      }
+      const nested = extractBody(part);
+      if (nested) return nested;
     }
   }
   return '';
+}
+
+// Walk the MIME tree collecting plan/spec document attachments
+const DOC_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/heic',
+]);
+
+function collectAttachments(payload: GmailPart): { filename: string; mimeType: string; attachmentId: string; size: number }[] {
+  const found: { filename: string; mimeType: string; attachmentId: string; size: number }[] = [];
+  function walk(part: GmailPart) {
+    if (part.filename && part.body?.attachmentId && DOC_MIME_TYPES.has(part.mimeType ?? '')) {
+      found.push({
+        filename: part.filename,
+        mimeType: part.mimeType!,
+        attachmentId: part.body.attachmentId,
+        size: part.body.size ?? 0,
+      });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  }
+  walk(payload);
+  return found;
+}
+
+// Classify an attachment filename as plans / specs / addendum / other
+function classifyDocument(filename: string): 'plans' | 'specs' | 'addendum' | 'other' {
+  const f = filename.toLowerCase();
+  if (/(addend|adden\b)/.test(f)) return 'addendum';
+  if (/(spec|manual|division)/.test(f)) return 'specs';
+  if (/(plan|drawing|dwg|sheet|blueprint|site|civil|c-\d|a-\d)/.test(f)) return 'plans';
+  if (f.endsWith('.pdf')) return 'plans';
+  return 'other';
 }
 
 // Generate next bid ID: BID-YYYY-NNN
@@ -72,6 +107,7 @@ export async function POST(req: NextRequest) {
 
     let detected = 0;
     let skipped = 0;
+    let documentsSaved = 0;
 
     for (const msg of messages) {
       // Fetch full message
@@ -106,6 +142,8 @@ ${emailText}
 
 Determine if this email is a genuine bid invitation asking NGU to submit a bid/quote/estimate as a subcontractor.
 
+Extract EVERY piece of data present — especially due dates (look for "bids due", "due by", "submit by", "closes", "deadline") and any proposed/anticipated construction start date. Dates may be written many ways ("March 5th", "3/5/26", "next Friday") — normalize to YYYY-MM-DD. If a date is genuinely absent, use null; never invent one. Also look for plan room links (PlanHub, Procore, BuildingConnected, Dropbox, SharePoint, QuestCDN) anywhere in the body.
+
 If YES, extract the bid information and return this exact JSON:
 {
   "is_bid": true,
@@ -119,6 +157,7 @@ If YES, extract the bid information and return this exact JSON:
   "gc_contact_phone": "string or null",
   "bid_due_date": "YYYY-MM-DD or null",
   "bid_due_time": "HH:MM AM/PM or null",
+  "proposed_start_date": "YYYY-MM-DD or null (construction/mobilization start date if mentioned)",
   "scope": "short description of the work scope",
   "trades": ["array", "of", "trade", "names"],
   "plans_link": "URL if present or null",
@@ -161,6 +200,7 @@ Return ONLY the JSON object, no other text.`;
         gc_contact_phone: bidData.gc_contact_phone as string | null,
         bid_due_date: bidData.bid_due_date as string | null,
         bid_due_time: bidData.bid_due_time as string | null,
+        proposed_start_date: bidData.proposed_start_date as string | null,
         scope: bidData.scope as string | null,
         trades: (bidData.trades as string[]) ?? [],
         plans_link: bidData.plans_link as string | null,
@@ -179,6 +219,39 @@ Return ONLY the JSON object, no other text.`;
         date: internalDate,
       });
 
+      // Extract plan/spec attachments from the email into document storage
+      const attachments = collectAttachments(msgData.payload ?? {});
+      for (const att of attachments) {
+        try {
+          const attRes = await gmailFetch(accessToken, `/messages/${msg.id}/attachments/${att.attachmentId}`);
+          if (!attRes.ok) continue;
+          const attData = await attRes.json();
+          if (!attData.data) continue;
+          const bytes = Buffer.from(attData.data, 'base64url');
+
+          const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const storagePath = `${workspaceId}/bids/${bidId}/${Date.now()}-${safeName}`;
+          const { error: uploadError } = await serviceClient.storage
+            .from('documents')
+            .upload(storagePath, bytes, { contentType: att.mimeType });
+          if (uploadError) continue;
+
+          await serviceClient.from('documents').insert({
+            workspace_id: workspaceId,
+            bid_id: bidId,
+            name: att.filename,
+            type: classifyDocument(att.filename),
+            storage_path: storagePath,
+            file_size: bytes.length,
+            mime_type: att.mimeType,
+            uploaded_by: user.id,
+          });
+          documentsSaved++;
+        } catch {
+          // Skip attachments that fail — the bid itself is already created
+        }
+      }
+
       detected++;
     }
 
@@ -186,9 +259,10 @@ Return ONLY the JSON object, no other text.`;
       success: true,
       detected,
       skipped,
+      documents_saved: documentsSaved,
       message: detected === 0
         ? 'No new bids found in Gmail inbox.'
-        : `Created ${detected} new bid${detected !== 1 ? 's' : ''} from Gmail.`,
+        : `Created ${detected} new bid${detected !== 1 ? 's' : ''} from Gmail${documentsSaved > 0 ? ` and saved ${documentsSaved} plan document${documentsSaved !== 1 ? 's' : ''}` : ''}.`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Detection failed';
