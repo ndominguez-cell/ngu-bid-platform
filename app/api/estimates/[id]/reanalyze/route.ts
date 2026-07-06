@@ -37,6 +37,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const auth = await requireUser();
   if (auth.error) return auth.error;
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: 'AI is not configured: ANTHROPIC_API_KEY is missing from the deployment environment variables.' },
+      { status: 500 }
+    );
+  }
+
   const supabase = createServiceClient();
 
   try {

@@ -92,15 +92,28 @@ export async function POST(req: NextRequest) {
   const user = auth.user;
   const workspaceId = auth.workspaceId;
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: 'AI is not configured: ANTHROPIC_API_KEY is missing from the deployment environment variables.' },
+      { status: 500 }
+    );
+  }
+
   try {
     const accessToken = await getValidAccessToken(user.id);
     const serviceClient = createServiceClient();
 
-    // Fetch recent inbox emails with bid-related keywords
-    const listRes = await gmailFetch(
-      accessToken,
-      '/messages?q=in:inbox+subject:(bid+OR+"invitation+to+bid"+OR+"request+for+proposal"+OR+"RFP"+OR+"RFQ"+OR+"subcontractor+bid"+OR+"bid+invitation"+OR+estimate+OR+quote)&maxResults=30'
+    // Search the last 21 days of mail (not just inbox — archived counts too),
+    // matching bid keywords anywhere in the message, not only the subject.
+    const query = encodeURIComponent(
+      '-in:spam -in:trash newer_than:21d (' +
+      'subject:(bid OR estimate OR quote OR proposal OR RFP OR RFQ OR ITB) ' +
+      'OR "invitation to bid" OR "invitation to quote" OR "request for proposal" ' +
+      'OR "request for quote" OR "bid invitation" OR "bids due" OR "bid due" ' +
+      'OR "subcontractor bid" OR "scope of work" OR "plans and specs"' +
+      ')'
     );
+    const listRes = await gmailFetch(accessToken, `/messages?q=${query}&maxResults=40`);
     if (!listRes.ok) throw new Error('Failed to list Gmail messages');
     const listData = await listRes.json();
     const messages: { id: string }[] = listData.messages ?? [];
@@ -260,8 +273,11 @@ Return ONLY the JSON object, no other text.`;
       detected,
       skipped,
       documents_saved: documentsSaved,
+      scanned: messages.length,
       message: detected === 0
-        ? 'No new bids found in Gmail inbox.'
+        ? (messages.length === 0
+            ? 'No emails matched bid keywords in the last 21 days. If the invitation is older, forward it to yourself to re-date it.'
+            : `Scanned ${messages.length} candidate email${messages.length !== 1 ? 's' : ''} from the last 21 days — none were bid invitations (${skipped} skipped as duplicates or non-bids).`)
         : `Created ${detected} new bid${detected !== 1 ? 's' : ''} from Gmail${documentsSaved > 0 ? ` and saved ${documentsSaved} plan document${documentsSaved !== 1 ? 's' : ''}` : ''}.`,
     });
   } catch (err: unknown) {
