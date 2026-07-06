@@ -110,12 +110,16 @@ export default async function BidDetailPage({ params }: { params: { id: string }
         </div>
 
         <div
-          className="mt-6 grid grid-cols-2 gap-6 border-t pt-6 md:grid-cols-4"
+          className="mt-6 grid grid-cols-2 gap-6 border-t pt-6 md:grid-cols-5"
           style={{ borderTop: '1px dashed var(--border)' }}
         >
           <Detail label="Submit To"      value={bid.submit_to ?? '—'} mono />
           <Detail label="GC Contact"     value={bid.gc_contact_name ?? '—'} extra={bid.gc_contact_phone} />
           <Detail label="Email Received" value={formatDate(bid.email_received)} />
+          <Detail
+            label="Proposed Start"
+            value={bid.proposed_start_date ? formatDate(bid.proposed_start_date) : 'TBD'}
+          />
           <Detail
             label="Our Bid Amount"
             value={bid.our_bid_amount != null ? formatCurrency(bid.our_bid_amount) : 'Pending'}

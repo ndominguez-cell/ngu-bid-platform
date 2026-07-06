@@ -26,12 +26,22 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
 
   if (error || !data) notFound();
 
+  // Workspace-wide estimating defaults (RLS scopes this to the user's workspace)
+  const { data: workspace } = await supabase
+    .from('workspaces')
+    .select('default_markup_pct, default_margin_pct')
+    .limit(1)
+    .maybeSingle();
+  const defaultMarkup = Number(workspace?.default_markup_pct ?? 10);
+  const defaultMargin = Number(workspace?.default_margin_pct ?? 8);
+
   const est = data as {
     id: string;
     name: string;
     status: 'Draft' | 'In Review' | 'Approved' | 'Submitted' | 'Archived';
     total_amount: number | null;
     markup_pct: number;
+    margin_pct: number | null;
     notes: string | null;
     ai_summary: string | null;
     line_items: Array<{ trade: string; description: string; qty: number; unit: string; unit_price: number; total: number }>;
@@ -145,10 +155,13 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
       <EstimateEditor
         estimateId={est.id}
         initialLineItems={est.line_items ?? []}
-        initialMarkup={est.markup_pct ?? 10}
+        initialMarkup={est.markup_pct ?? defaultMarkup}
+        initialMargin={est.margin_pct ?? defaultMargin}
         initialStatus={est.status ?? 'Draft'}
         initialNotes={est.notes}
         bidId={est.bid_id}
+        defaultMarkup={defaultMarkup}
+        defaultMargin={defaultMargin}
       />
     </div>
   );

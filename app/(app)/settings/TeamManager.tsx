@@ -13,23 +13,26 @@ interface TeamMember {
   created_at: string;
 }
 
-const ROLE_INFO: Record<UserRole, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
+const ROLE_INFO: Record<UserRole, { label: string; icon: React.ReactNode; bg: string; color: string; desc: string }> = {
   admin: {
     label: 'Admin',
     icon: <Shield size={12} />,
-    color: 'bg-red-100 text-red-700',
+    bg: 'var(--bad-soft)',
+    color: 'var(--bad)',
     desc: 'Full access — create, edit, delete, manage team',
   },
   estimator: {
     label: 'Estimator',
     icon: <Pencil size={12} />,
-    color: 'bg-blue-100 text-blue-700',
+    bg: 'var(--info-soft)',
+    color: 'var(--info)',
     desc: 'Create and edit bids, estimates, proposals',
   },
   viewer: {
     label: 'Viewer',
     icon: <Eye size={12} />,
-    color: 'bg-gray-100 text-gray-600',
+    bg: 'var(--surface-3)',
+    color: 'var(--text-muted)',
     desc: 'Read-only access — cannot create or edit',
   },
 };
@@ -77,7 +80,7 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8 text-gray-400">
+      <div className="flex items-center justify-center py-8" style={{ color: 'var(--text-subtle)' }}>
         <Loader2 size={18} className="animate-spin mr-2" /> Loading team…
       </div>
     );
@@ -85,26 +88,38 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
 
   if (error) {
     return (
-      <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-4">{error}</div>
+      <div
+        className="text-sm rounded-lg p-4"
+        style={{ color: 'var(--bad)', background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)' }}
+      >
+        {error}
+      </div>
     );
   }
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
-        <Users size={14} className="text-[#1a3a5c]" />
-        <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Team Members</h2>
-        <span className="text-xs text-gray-400 ml-auto">{team.length} member{team.length !== 1 ? 's' : ''}</span>
+        <Users size={14} style={{ color: 'var(--navy)' }} />
+        <h2 className="label-mono text-[11px]" style={{ color: 'var(--navy)' }}>Team Members</h2>
+        <span className="text-xs ml-auto" style={{ color: 'var(--text-subtle)' }}>{team.length} member{team.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Role legend */}
       <div className="grid grid-cols-3 gap-2 mb-5">
         {(Object.entries(ROLE_INFO) as [UserRole, typeof ROLE_INFO[UserRole]][]).map(([role, info]) => (
-          <div key={role} className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-            <div className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1 ${info.color}`}>
+          <div
+            key={role}
+            className="p-2.5 rounded-lg"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+          >
+            <div
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1"
+              style={{ background: info.bg, color: info.color }}
+            >
               {info.icon} {info.label}
             </div>
-            <p className="text-[10px] text-gray-500">{info.desc}</p>
+            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{info.desc}</p>
           </div>
         ))}
       </div>
@@ -114,33 +129,51 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
           const roleInfo = ROLE_INFO[member.role];
           const isMe = member.id === currentUserId;
           return (
-            <div key={member.id} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
-              <div className="w-8 h-8 bg-[#1a3a5c] rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0">
+            <div
+              key={member.id}
+              className="flex items-center gap-3 p-3 rounded-lg transition-colors"
+              style={{ border: '1px solid var(--border)' }}
+            >
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0"
+                style={{ background: '#1a3a5c' }}
+              >
                 {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-700 truncate">
+                  <span className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
                     {member.full_name || member.email}
                   </span>
-                  {isMe && <span className="text-[9px] font-bold bg-[#e87722]/10 text-[#e87722] px-1.5 py-0.5 rounded-full">You</span>}
+                  {isMe && (
+                    <span
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: 'var(--orange-soft)', color: 'var(--orange)' }}
+                    >
+                      You
+                    </span>
+                  )}
                 </div>
-                {member.full_name && <p className="text-[11px] text-gray-400 truncate">{member.email}</p>}
-                {member.title && <p className="text-[10px] text-gray-400">{member.title}</p>}
+                {member.full_name && <p className="text-[11px] truncate" style={{ color: 'var(--text-subtle)' }}>{member.email}</p>}
+                {member.title && <p className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>{member.title}</p>}
               </div>
               <div className="shrink-0">
                 {isMe ? (
-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${roleInfo.color}`}>
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full"
+                    style={{ background: roleInfo.bg, color: roleInfo.color }}
+                  >
                     {roleInfo.icon} {roleInfo.label}
                   </span>
                 ) : (
                   <div className="flex items-center gap-1.5">
-                    {saving === member.id && <Loader2 size={12} className="animate-spin text-gray-400" />}
+                    {saving === member.id && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-subtle)' }} />}
                     <select
                       value={member.role}
                       onChange={e => updateRole(member.id, e.target.value as UserRole)}
                       disabled={saving === member.id}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#1a3a5c] ${roleInfo.color}`}
+                      className="text-[10px] font-bold px-2 py-1 rounded-full border-0 cursor-pointer outline-none"
+                      style={{ background: roleInfo.bg, color: roleInfo.color }}
                     >
                       <option value="admin">Admin</option>
                       <option value="estimator">Estimator</option>

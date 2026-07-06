@@ -131,6 +131,12 @@
   .btn-primary:hover { background: var(--orange); border-color: var(--orange); }
   .btn-accent  { background: var(--orange); color: white; border-color: var(--orange); }
   .btn-accent:hover { background: var(--orange-hover); border-color: var(--orange-hover); }
+
+  /* Dark mode: fix white-on-light contrast for buttons */
+  [data-theme='dark'] .btn-primary { background: #1a3a5c; border-color: #1a3a5c; color: #fff; }
+  [data-theme='dark'] .btn-primary:hover { background: var(--orange); border-color: var(--orange); color: #fff; }
+  [data-theme='dark'] .btn-accent { background: oklch(0.60 0.16 50); border-color: oklch(0.60 0.16 50); color: #fff; }
+  [data-theme='dark'] .btn-accent:hover { background: oklch(0.55 0.16 50); border-color: oklch(0.55 0.16 50); color: #fff; }
   .btn-ghost { background: transparent; border-color: transparent; }
   .btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
   .btn-sm { @apply h-7 px-2.5 text-[12px]; }

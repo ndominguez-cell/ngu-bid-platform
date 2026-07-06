@@ -56,22 +56,26 @@ export default function ProfileEditor({ initialName, initialTitle, initialRole, 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-bold text-[#1a3a5c] uppercase tracking-wider">Your Account</h2>
+        <h2 className="label-mono text-[11px]" style={{ color: 'var(--navy)' }}>Your Account</h2>
         {!editing ? (
           <button onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#1a3a5c] font-semibold transition-colors">
+            className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
+            style={{ color: 'var(--text-subtle)' }}
+          >
             <Pencil size={11} /> Edit
           </button>
         ) : (
           <div className="flex items-center gap-2">
-            {error && <span className="text-xs text-red-500">{error}</span>}
-            {saved && <span className="text-xs text-green-600 font-semibold">Saved ✓</span>}
+            {error && <span className="text-xs" style={{ color: 'var(--bad)' }}>{error}</span>}
+            {saved && <span className="text-xs font-semibold" style={{ color: 'var(--ok)' }}>Saved</span>}
             <button onClick={handleCancel} disabled={saving}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 font-semibold transition-colors">
+              className="flex items-center gap-1 text-xs font-semibold transition-colors"
+              style={{ color: 'var(--text-subtle)' }}
+            >
               <X size={12} /> Cancel
             </button>
             <button onClick={handleSave} disabled={saving}
-              className="flex items-center gap-1.5 text-xs bg-[#1a3a5c] hover:bg-[#e87722] text-white font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
+              className="btn btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-60">
               {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
               {saving ? 'Saving…' : 'Save'}
             </button>
@@ -81,50 +85,53 @@ export default function ProfileEditor({ initialName, initialTitle, initialRole, 
 
       <div className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Name</label>
+          <label className="label-mono block mb-1">Name</label>
           {editing ? (
             <input
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Your full name"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c]"
+              className="w-full rounded border px-3 py-2 text-sm outline-none"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
             />
           ) : (
-            <p className="text-sm font-medium text-gray-700">{name || '—'}</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{name || '—'}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Title</label>
+          <label className="label-mono block mb-1">Title</label>
           {editing ? (
             <input
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="e.g. Estimator, Project Manager"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c]"
+              className="w-full rounded border px-3 py-2 text-sm outline-none"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
             />
           ) : (
-            <p className="text-sm font-medium text-gray-700">{title || '—'}</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{title || '—'}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Email</label>
-          <p className="text-sm font-medium text-gray-500">{email}</p>
+          <label className="label-mono block mb-1">Email</label>
+          <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{email}</p>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Role</label>
+          <label className="label-mono block mb-1">Role</label>
           {editing ? (
             <select
               value={role}
               onChange={e => setRole(e.target.value as UserRole)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a5c] capitalize"
+              className="rounded border px-3 py-2 text-sm outline-none capitalize"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
             >
               {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           ) : (
-            <p className="text-sm font-medium text-gray-700 capitalize">{role}</p>
+            <p className="text-sm font-medium capitalize" style={{ color: 'var(--text)' }}>{role}</p>
           )}
         </div>
       </div>

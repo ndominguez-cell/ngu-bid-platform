@@ -32,6 +32,7 @@ export interface Bid {
   plans_link: string | null;
   source: string | null;
   status: BidStatus;
+  proposed_start_date: string | null;
   our_bid_amount: number | null;
   awarded_amount: number | null;
   notes: string | null;
@@ -95,6 +96,7 @@ export interface Estimate {
   status: EstimateStatus;
   total_amount: number | null;
   markup_pct: number;
+  margin_pct: number | null;
   notes: string | null;
   ai_summary: string | null;
   line_items: EstimateLineItem[];

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { getDaysLeft, formatDate, formatCurrency } from '@/lib/utils';
 import type { Bid } from '@/lib/types';
-import { Plus, Mail, ArrowRight, Filter } from 'lucide-react';
+import { Plus, Mail, ArrowRight, Filter, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
 import { SourcePill } from '@/components/ui/SourcePill';
@@ -39,7 +39,13 @@ async function getData() {
   };
 }
 
-export default async function DashboardPage() {
+type DashSortKey = 'project_name' | 'gc_name' | 'bid_due_date' | 'urgency' | 'status';
+
+interface DashboardPageProps {
+  searchParams: { sort?: string; dir?: string };
+}
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const { bids, activities } = await getData();
 
   const active    = bids.filter(b => !TERMINAL.includes(b.status));
@@ -52,9 +58,35 @@ export default async function DashboardPage() {
 
   const inFlight = active.reduce((sum, b) => sum + (b.our_bid_amount ?? 0), 0);
 
+  const sortKey: DashSortKey = (['project_name', 'gc_name', 'bid_due_date', 'urgency', 'status'] as const).includes(
+    searchParams?.sort as DashSortKey
+  ) ? (searchParams!.sort as DashSortKey) : 'bid_due_date';
+  const sortDir: 'asc' | 'desc' = searchParams?.dir === 'desc' ? 'desc' : 'asc';
+  const dir = sortDir === 'asc' ? 1 : -1;
+
   const upcoming = active
     .filter(b => b.bid_due_date)
-    .sort((a, b) => new Date(a.bid_due_date!).getTime() - new Date(b.bid_due_date!).getTime())
+    .sort((a, b) => {
+      switch (sortKey) {
+        case 'project_name':
+          return a.project_name.localeCompare(b.project_name) * dir;
+        case 'gc_name':
+          return (a.gc_name ?? '').localeCompare(b.gc_name ?? '') * dir;
+        case 'urgency': {
+          const av = getDaysLeft(a.bid_due_date) ?? Infinity;
+          const bv = getDaysLeft(b.bid_due_date) ?? Infinity;
+          return (av - bv) * dir;
+        }
+        case 'status':
+          return a.status.localeCompare(b.status) * dir;
+        case 'bid_due_date':
+        default: {
+          const av = a.bid_due_date ?? '9999-99-99';
+          const bv = b.bid_due_date ?? '9999-99-99';
+          return av.localeCompare(bv) * dir;
+        }
+      }
+    })
     .slice(0, 8);
 
   const statusCounts = bids.reduce<Record<string, number>>((acc, b) => {
@@ -64,6 +96,15 @@ export default async function DashboardPage() {
   const statusOrder: Bid['status'][] = ['New', 'Reviewing', 'Active', 'Submitted', 'Won', 'Lost', 'Declined', 'Expired'];
 
   const pipelineData = buildPipelineData(bids);
+
+  function dashSortHref(key: DashSortKey) {
+    const nextDir = sortKey === key && sortDir === 'asc' ? 'desc' : 'asc';
+    const params = new URLSearchParams();
+    params.set('sort', key);
+    if (nextDir !== 'asc') params.set('dir', nextDir);
+    const qs = params.toString();
+    return qs ? `/dashboard?${qs}` : '/dashboard';
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1480px] px-7 pb-20 pt-6">
@@ -94,36 +135,44 @@ export default async function DashboardPage() {
       {/* Urgent banner */}
       <UrgentBanner bids={urgent} />
 
-      {/* KPIs */}
+      {/* KPIs — clickable */}
       <div className="mb-[18px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI
-          label="Total Bids"
-          value={bids.length}
-          sub="All-time"
-          delta="+3 wk"
-          spark={[18, 21, 23, 26, 28, bids.length]}
-        />
-        <KPI
-          label="Due ≤ 3 Days"
-          value={urgent.length}
-          sub="Includes today"
-          delta={urgent.length > 0 ? 'Action' : undefined}
-          deltaTone="down"
-          urgent={urgent.length > 0}
-        />
-        <KPI
-          label="Due This Week"
-          value={thisWeek.length}
-          sub={`${submitted.length} already submitted`}
-        />
-        <KPI
-          label="Win Rate (TTM)"
-          value={`${Math.round(winRate * 100)}%`}
-          sub={`${won.length} wins · ${lost.length} losses`}
-          delta="+4 pts"
-          spark={[30, 34, 38, 36, 42, Math.round(winRate * 100)]}
-          sparkColor="var(--ok)"
-        />
+        <Link href="/bids?status=all" className="block">
+          <KPI
+            label="Total Bids"
+            value={bids.length}
+            sub="All-time"
+            delta="+3 wk"
+            spark={[18, 21, 23, 26, 28, bids.length]}
+          />
+        </Link>
+        <Link href="/bids?status=open&sort=days_left&dir=asc" className="block">
+          <KPI
+            label="Due ≤ 3 Days"
+            value={urgent.length}
+            sub="Includes today"
+            delta={urgent.length > 0 ? 'Action' : undefined}
+            deltaTone="down"
+            urgent={urgent.length > 0}
+          />
+        </Link>
+        <Link href="/bids?status=open&sort=bid_due_date" className="block">
+          <KPI
+            label="Due This Week"
+            value={thisWeek.length}
+            sub={`${submitted.length} already submitted`}
+          />
+        </Link>
+        <Link href="/bids?status=Won" className="block">
+          <KPI
+            label="Win Rate (TTM)"
+            value={`${Math.round(winRate * 100)}%`}
+            sub={`${won.length} wins · ${lost.length} losses`}
+            delta="+4 pts"
+            spark={[30, 34, 38, 36, 42, Math.round(winRate * 100)]}
+            sparkColor="var(--ok)"
+          />
+        </Link>
       </div>
 
       {/* Pipeline + Status breakdown */}
@@ -155,10 +204,10 @@ export default async function DashboardPage() {
               const c = statusCounts[s];
               const pct = bids.length ? c / bids.length : 0;
               return (
-                <div key={s} className="mb-3">
+                <Link key={s} href={`/bids?status=${s}`} className="block mb-3 group">
                   <div className="mb-1.5 flex items-center justify-between">
                     <StatusPill status={s} />
-                    <span className="mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{c}</span>
+                    <span className="mono text-[11px] group-hover:underline" style={{ color: 'var(--text-muted)' }}>{c}</span>
                   </div>
                   <div className="h-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
                     <div
@@ -169,7 +218,7 @@ export default async function DashboardPage() {
                       }}
                     />
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -188,7 +237,7 @@ export default async function DashboardPage() {
               View all <ArrowRight size={12} />
             </Link>
           </div>
-          <UpcomingTable bids={upcoming} />
+          <UpcomingTable bids={upcoming} sortKey={sortKey} sortDir={sortDir} sortHref={dashSortHref} />
         </div>
 
         <div className="card lg:col-span-4">
@@ -317,7 +366,7 @@ function PipelineChart({ data }: { data: { label: string; invites: number; submi
 }
 
 /* ============================================================
-   Activity feed
+   Activity feed — clickable items
    ============================================================ */
 
 const TYPE_DOT: Record<string, string> = {
@@ -367,7 +416,11 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
         const meta = a.metadata as Record<string, unknown> | null ?? {};
         const fromTo = meta.from && meta.to ? `${meta.from} → ${meta.to}` : null;
         return (
-          <div key={a.id} className="flex items-start gap-3 px-4 py-3">
+          <Link
+            key={a.id}
+            href={`/bids/${a.bid_id}`}
+            className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-2)] cursor-pointer"
+          >
             <span
               className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
               style={{ background: dotColor }}
@@ -378,13 +431,12 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
                 {a.bids?.project_name && (
                   <>
                     {' on '}
-                    <Link
-                      href={`/bids/${a.bid_id}`}
+                    <span
                       className="font-medium hover:text-[var(--orange)] transition-colors"
                       style={{ color: 'var(--text)' }}
                     >
                       {a.bids.project_name}
-                    </Link>
+                    </span>
                   </>
                 )}
               </div>
@@ -402,7 +454,7 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
             <span className="mono shrink-0 text-[10.5px] pt-0.5" style={{ color: 'var(--text-subtle)' }}>
               {relativeTime(a.created_at)}
             </span>
-          </div>
+          </Link>
         );
       })}
     </div>
@@ -410,10 +462,17 @@ function ActivityFeed({ activities }: { activities: ActivityRow[] }) {
 }
 
 /* ============================================================
-   Upcoming bids table
+   Upcoming bids table — sortable
    ============================================================ */
 
-function UpcomingTable({ bids }: { bids: Bid[] }) {
+function UpcomingTable({
+  bids, sortKey, sortDir, sortHref,
+}: {
+  bids: Bid[];
+  sortKey: DashSortKey;
+  sortDir: 'asc' | 'desc';
+  sortHref: (key: DashSortKey) => string;
+}) {
   if (bids.length === 0) {
     return (
       <div className="px-6 py-12 text-center text-[14px]" style={{ color: 'var(--text-subtle)' }}>
@@ -425,11 +484,11 @@ function UpcomingTable({ bids }: { bids: Bid[] }) {
     <table className="w-full border-collapse text-[13px]">
       <thead>
         <tr>
-          <Th>Project</Th>
-          <Th>GC</Th>
-          <Th>Bid Due</Th>
-          <Th>Urgency</Th>
-          <Th>Status</Th>
+          <DashSortTh sortKey="project_name" current={sortKey} dir={sortDir} href={sortHref('project_name')}>Project</DashSortTh>
+          <DashSortTh sortKey="gc_name" current={sortKey} dir={sortDir} href={sortHref('gc_name')}>GC</DashSortTh>
+          <DashSortTh sortKey="bid_due_date" current={sortKey} dir={sortDir} href={sortHref('bid_due_date')}>Bid Due</DashSortTh>
+          <DashSortTh sortKey="urgency" current={sortKey} dir={sortDir} href={sortHref('urgency')}>Urgency</DashSortTh>
+          <DashSortTh sortKey="status" current={sortKey} dir={sortDir} href={sortHref('status')}>Status</DashSortTh>
         </tr>
       </thead>
       <tbody>
@@ -458,11 +517,17 @@ function UpcomingTable({ bids }: { bids: Bid[] }) {
               </Td>
               <Td><span style={{ color: 'var(--text-2)' }}>{b.gc_name ?? '—'}</span></Td>
               <Td>
-                <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
-                {b.bid_due_time && (
-                  <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
-                    {b.bid_due_time}
-                  </div>
+                {b.bid_due_date ? (
+                  <>
+                    <span className="mono text-[12px]">{formatDate(b.bid_due_date, 'MMM d')}</span>
+                    {b.bid_due_time && (
+                      <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-subtle)' }}>
+                        {b.bid_due_time}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[12px] italic" style={{ color: 'var(--text-subtle)' }}>No date set</span>
                 )}
               </Td>
               <Td><UrgencyBadge days={d} /></Td>
@@ -497,13 +562,31 @@ function Legend({ swatch, label }: { swatch: string; label: string }) {
   );
 }
 
-function Th({ children }: { children?: React.ReactNode }) {
+function DashSortTh({
+  children, sortKey, current, dir, href,
+}: {
+  children?: React.ReactNode;
+  sortKey: DashSortKey;
+  current: DashSortKey;
+  dir: 'asc' | 'desc';
+  href: string;
+}) {
+  const isActive = sortKey === current;
+  const Icon = isActive ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
     <th
       className="border-b px-3.5 py-2.5 text-left font-mono text-[10px] font-medium uppercase tracking-wider"
       style={{ color: 'var(--text-muted)', borderColor: 'var(--border)', background: 'var(--surface-2)' }}
     >
-      {children}
+      <Link
+        href={href}
+        scroll={false}
+        className="inline-flex items-center gap-1 transition-colors hover:opacity-80"
+        style={{ color: isActive ? 'var(--text)' : 'var(--text-muted)' }}
+      >
+        {children}
+        <Icon size={11} />
+      </Link>
     </th>
   );
 }

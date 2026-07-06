@@ -23,12 +23,13 @@ export default function GmailDisconnectButton() {
   if (confirming) {
     return (
       <div className="flex items-center gap-1.5">
-        <span className="text-xs text-gray-500">Disconnect?</span>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Disconnect?</span>
         <button onClick={handleDisconnect} disabled={loading}
-          className="text-xs text-red-500 hover:text-red-700 font-bold disabled:opacity-60">
+          className="text-xs font-bold disabled:opacity-60" style={{ color: 'var(--bad)' }}>
           {loading ? <Loader2 size={11} className="animate-spin" /> : 'Yes'}
         </button>
-        <button onClick={() => setConfirming(false)} className="text-xs text-gray-400 hover:text-gray-600 font-semibold">
+        <button onClick={() => setConfirming(false)}
+          className="text-xs font-semibold" style={{ color: 'var(--text-subtle)' }}>
           No
         </button>
       </div>
@@ -37,7 +38,7 @@ export default function GmailDisconnectButton() {
 
   return (
     <button onClick={() => setConfirming(true)}
-      className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors">
+      className="text-xs font-semibold transition-colors" style={{ color: 'var(--bad)' }}>
       Disconnect
     </button>
   );

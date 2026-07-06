@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, Save, Loader2, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Save, Loader2, ChevronDown, Sparkles, RefreshCw } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 type EstimateStatus = 'Draft' | 'In Review' | 'Approved' | 'Submitted' | 'Archived';
@@ -20,9 +20,12 @@ interface EstimateEditorProps {
   estimateId: string;
   initialLineItems: LineItem[];
   initialMarkup: number;
+  initialMargin?: number;
   initialStatus: EstimateStatus;
   initialNotes: string | null;
   bidId: string | null;
+  defaultMarkup?: number;
+  defaultMargin?: number;
 }
 
 const STATUSES: EstimateStatus[] = ['Draft', 'In Review', 'Approved', 'Submitted', 'Archived'];
@@ -32,21 +35,36 @@ export default function EstimateEditor({
   estimateId,
   initialLineItems,
   initialMarkup,
+  initialMargin,
   initialStatus,
   initialNotes,
   bidId,
+  defaultMarkup = 10,
+  defaultMargin = 8,
 }: EstimateEditorProps) {
   const router = useRouter();
   const [lineItems, setLineItems] = useState<LineItem[]>(initialLineItems);
   const [markup, setMarkup] = useState(initialMarkup);
+  const [margin, setMargin] = useState(initialMargin ?? defaultMargin);
   const [status, setStatus] = useState<EstimateStatus>(initialStatus);
   const [notes, setNotes] = useState(initialNotes ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [reEvalLoading, setReEvalLoading] = useState(false);
 
   const subtotal = lineItems.reduce((s, li) => s + (li.total || 0), 0);
-  const grandTotal = Math.round(subtotal * (1 + markup / 100));
+  const markupAmount = Math.round(subtotal * markup / 100);
+  const subtotalWithMarkup = subtotal + markupAmount;
+  const marginAmount = Math.round(subtotalWithMarkup * margin / 100);
+  const grandTotal = subtotalWithMarkup + marginAmount;
+
+  // Trade cost breakdown
+  const tradeTotals = lineItems.reduce<Record<string, number>>((acc, li) => {
+    acc[li.trade] = (acc[li.trade] ?? 0) + (li.total || 0);
+    return acc;
+  }, {});
+  const tradeEntries = Object.entries(tradeTotals).sort((a, b) => b[1] - a[1]);
 
   function updateItem(index: number, field: keyof LineItem, value: string | number) {
     setLineItems(prev => {
@@ -78,7 +96,7 @@ export default function EstimateEditor({
       const res = await fetch(`/api/estimates/${estimateId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ line_items: lineItems, markup_pct: markup, status, notes }),
+        body: JSON.stringify({ line_items: lineItems, markup_pct: markup, margin_pct: margin, status, notes }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -88,6 +106,22 @@ export default function EstimateEditor({
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleReEvaluate() {
+    if (!bidId) return;
+    setReEvalLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/reanalyze`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Re-evaluation failed');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Re-evaluation failed');
+    } finally {
+      setReEvalLoading(false);
     }
   }
 
@@ -125,7 +159,31 @@ export default function EstimateEditor({
           </div>
         </div>
 
+        <div className="flex items-center gap-2">
+          <span className="label-mono">Margin</span>
+          <div className="flex items-center rounded border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <input
+              type="number"
+              min={0} max={100} step={0.5}
+              value={margin}
+              onChange={e => { setMargin(Number(e.target.value)); setSaved(false); }}
+              className="w-12 text-[13px] font-semibold text-center outline-none px-2 py-1"
+              style={{ background: 'var(--surface)', color: 'var(--text)' }}
+            />
+            <span className="px-2 py-1 text-[12px]" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>%</span>
+          </div>
+        </div>
+
         <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={handleReEvaluate}
+            disabled={reEvalLoading || !bidId}
+            className="btn btn-ghost btn-sm flex items-center gap-1.5"
+            title="Re-evaluate plan using AI"
+          >
+            {reEvalLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            Re-evaluate Plan via AI
+          </button>
           <div className="text-right">
             <div className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>Grand Total</div>
             <div className="text-[17px] font-bold" style={{ color: 'var(--navy)' }}>{formatCurrency(grandTotal)}</div>
@@ -145,7 +203,6 @@ export default function EstimateEditor({
           <h2 className="card-title">Line Items</h2>
           <div className="flex items-center gap-4 text-[12px]" style={{ color: 'var(--text-muted)' }}>
             <span>Subtotal: <span className="font-semibold" style={{ color: 'var(--navy)' }}>{formatCurrency(subtotal)}</span></span>
-            <span>Markup: <span className="font-semibold" style={{ color: 'var(--navy)' }}>{formatCurrency(subtotal * markup / 100)}</span></span>
           </div>
         </div>
 
@@ -234,9 +291,50 @@ export default function EstimateEditor({
               ))}
             </tbody>
             <tfoot>
+              {/* Subtotal line */}
+              <tr style={{ borderTop: '2px solid var(--border)' }}>
+                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Subtotal
+                </td>
+                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
+                  {formatCurrency(subtotal)}
+                </td>
+                <td />
+              </tr>
+              {/* Markup line */}
+              <tr style={{ borderTop: '1px solid var(--border)' }}>
+                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Markup ({markup}%)
+                </td>
+                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
+                  {formatCurrency(markupAmount)}
+                </td>
+                <td />
+              </tr>
+              {/* Subtotal + Markup */}
+              <tr style={{ borderTop: '1px dashed var(--border)' }}>
+                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Subtotal + Markup
+                </td>
+                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
+                  {formatCurrency(subtotalWithMarkup)}
+                </td>
+                <td />
+              </tr>
+              {/* Margin line */}
+              <tr style={{ borderTop: '1px solid var(--border)' }}>
+                <td colSpan={5} className="px-3 py-2 text-right text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Margin ({margin}%)
+                </td>
+                <td className="px-3 py-2 text-right text-[14px] font-semibold" style={{ color: 'var(--navy)' }}>
+                  {formatCurrency(marginAmount)}
+                </td>
+                <td />
+              </tr>
+              {/* Grand Total */}
               <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
-                <td colSpan={5} className="px-3 py-3 text-right text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                  Grand Total (incl. {markup}% markup)
+                <td colSpan={5} className="px-3 py-3 text-right text-[13px] font-bold" style={{ color: 'var(--text)' }}>
+                  Grand Total
                 </td>
                 <td className="px-3 py-3 text-right text-[16px] font-bold" style={{ color: 'var(--navy)' }}>
                   {formatCurrency(grandTotal)}
@@ -259,6 +357,51 @@ export default function EstimateEditor({
           </button>
         </div>
       </div>
+
+      {/* Trade Cost Breakdown Widget */}
+      {tradeEntries.length > 0 && (
+        <div className="card overflow-hidden p-0">
+          <div className="card-head">
+            <h2 className="card-title">Cost by Trade</h2>
+            <span className="label-mono">{tradeEntries.length} trades</span>
+          </div>
+          <div className="p-4">
+            <div className="space-y-3">
+              {tradeEntries.map(([trade, total]) => {
+                const pct = subtotal > 0 ? (total / subtotal) * 100 : 0;
+                return (
+                  <div key={trade}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{trade}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="mono text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                          {pct.toFixed(1)}%
+                        </span>
+                        <span className="mono text-[13px] font-semibold" style={{ color: 'var(--navy)' }}>
+                          {formatCurrency(total)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--surface-3)' }}>
+                      <div
+                        className="h-full rounded-full transition-[width] duration-300"
+                        style={{ width: `${pct}%`, background: 'var(--orange)' }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div
+              className="mt-4 pt-3 flex justify-between text-[13px] font-semibold"
+              style={{ borderTop: '1px solid var(--border)', color: 'var(--text)' }}
+            >
+              <span>Total (all trades)</span>
+              <span className="mono" style={{ color: 'var(--navy)' }}>{formatCurrency(subtotal)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notes */}
       <div className="card p-4">
