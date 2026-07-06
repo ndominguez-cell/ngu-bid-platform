@@ -72,6 +72,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const auth = await requireUser();
   if (auth.error) return auth.error;
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: 'AI is not configured: ANTHROPIC_API_KEY is missing from the deployment environment variables.' },
+      { status: 500 }
+    );
+  }
+
   const serviceClient = createServiceClient();
   const { data: bid, error: bidError } = await serviceClient
     .from('bids')
@@ -102,17 +109,19 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
     let fullText = '';
     let attempts = 0;
     const maxAttempts = 8;
+    // Stay under serverless function limits: stop starting new rounds after 220s
+    const deadline = Date.now() + 220_000;
 
     // Run Claude with web search, looping to handle multi-turn tool use
     let messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
 
-    while (attempts < maxAttempts) {
+    while (attempts < maxAttempts && Date.now() < deadline) {
       attempts++;
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         system: SYSTEM_PROMPT,
-        tools: [{ type: 'web_search_20260209' as const, name: 'web_search' }],
+        tools: [{ type: 'web_search_20260209' as const, name: 'web_search', max_uses: 8 }],
         messages,
       });
 
@@ -170,7 +179,12 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
 
     return NextResponse.json(report);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Plan search failed';
+    let message = err instanceof Error ? err.message : 'Plan search failed';
+    if (err instanceof Anthropic.AuthenticationError) {
+      message = 'AI authentication failed — the ANTHROPIC_API_KEY on the deployment is invalid or revoked.';
+    } else if (err instanceof Anthropic.RateLimitError) {
+      message = 'AI rate limit reached — wait a minute and try again.';
+    }
     console.error('[find-plans] error:', message, err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
