@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import PrintActions from './PrintActions';
 
 export const revalidate = 0;
 
@@ -20,6 +21,7 @@ export default async function EstimatePrintPage({ params }: { params: { id: stri
     status: string;
     total_amount: number | null;
     markup_pct: number;
+    margin_pct: number | null;
     notes: string | null;
     ai_summary: string | null;
     created_at: string;
@@ -38,7 +40,9 @@ export default async function EstimatePrintPage({ params }: { params: { id: stri
   const lineItems = est.line_items ?? [];
   const subtotal = lineItems.reduce((s, li) => s + (li.total || 0), 0);
   const markupAmt = subtotal * (est.markup_pct / 100);
-  const grandTotal = Math.round(subtotal + markupAmt);
+  const marginPct = Number(est.margin_pct ?? 0);
+  const marginAmt = (subtotal + markupAmt) * (marginPct / 100);
+  const grandTotal = Math.round(subtotal + markupAmt + marginAmt);
 
   // Group line items by trade
   const byTrade: Record<string, typeof lineItems> = {};
@@ -58,20 +62,7 @@ export default async function EstimatePrintPage({ params }: { params: { id: stri
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
       `}</style>
 
-      <div className="no-print fixed top-4 right-4 flex gap-2 z-50">
-        <button
-          onClick={() => window.print()}
-          className="bg-[#1a3a5c] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-[#e87722] transition-colors shadow-lg"
-        >
-          Print / Save PDF
-        </button>
-        <button
-          onClick={() => window.close()}
-          className="bg-white border border-gray-200 text-gray-600 text-sm font-semibold px-4 py-2 rounded-lg hover:border-[#1a3a5c] transition-colors shadow-lg"
-        >
-          Close
-        </button>
-      </div>
+      <PrintActions />
 
       <div className="max-w-[800px] mx-auto p-8 bg-white min-h-screen">
         {/* Header */}
@@ -140,7 +131,7 @@ export default async function EstimatePrintPage({ params }: { params: { id: stri
               <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                 <td className="px-3 py-2 text-xs font-medium text-purple-700">{item.trade}</td>
                 <td className="px-3 py-2 text-gray-700">{item.description}</td>
-                <td className="px-3 py-2 text-right text-gray-600">{item.qty.toLocaleString()}</td>
+                <td className="px-3 py-2 text-right text-gray-600">{item.qty?.toLocaleString()}</td>
                 <td className="px-3 py-2 text-gray-500 text-xs">{item.unit}</td>
                 <td className="px-3 py-2 text-right text-gray-600">{formatCurrency(item.unit_price)}</td>
                 <td className="px-3 py-2 text-right font-bold text-[#1a3a5c]">{formatCurrency(item.total)}</td>
@@ -158,6 +149,14 @@ export default async function EstimatePrintPage({ params }: { params: { id: stri
               </td>
               <td className="px-3 py-2 text-right font-bold text-gray-700">{formatCurrency(markupAmt)}</td>
             </tr>
+            {marginPct > 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-2 text-right text-xs font-bold text-gray-500 uppercase">
+                  Margin ({marginPct}%)
+                </td>
+                <td className="px-3 py-2 text-right font-bold text-gray-700">{formatCurrency(marginAmt)}</td>
+              </tr>
+            )}
             <tr className="bg-[#1a3a5c] text-white">
               <td colSpan={5} className="px-3 py-3 text-right font-black uppercase text-sm tracking-wider">Grand Total</td>
               <td className="px-3 py-3 text-right font-black text-lg">{formatCurrency(grandTotal)}</td>
