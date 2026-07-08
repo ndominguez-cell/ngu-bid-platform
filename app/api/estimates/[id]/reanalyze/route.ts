@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  FULL_ESTIMATE_INSTRUCTIONS,
+  buildDocContentParts,
+  guessMimeType,
+  parseEstimateResponse,
+  type EstimateLineItem,
+} from '@/lib/estimate-ai';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Static system prompt — cached on first call, ~90% cheaper on subsequent calls.
-const SYSTEM_PROMPT = `You are an expert construction estimator for NGU Construction, a Texas site work and concrete subcontractor.
+const APPEND_SYSTEM_PROMPT = `You are an expert construction estimator for NGU Construction, a Texas site work and concrete subcontractor.
 
 When additional plan files are uploaded for an existing estimate, analyze the new documents and generate ADDITIONAL or UPDATED line items only — do not repeat items already in the estimate.
 
@@ -47,12 +54,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const supabase = createServiceClient();
 
   try {
-    const body = await req.json();
-    const { storage_paths, file_names } = body as { storage_paths: string[]; file_names: string[] };
-
-    if (!storage_paths?.length) {
-      return NextResponse.json({ error: 'No files provided' }, { status: 400 });
-    }
+    // The "Re-evaluate Plan via AI" button posts with no body at all —
+    // treat that the same as an empty body.
+    const body = (await req.json().catch(() => ({}))) as {
+      storage_paths?: string[];
+      file_names?: string[];
+    };
+    const newPaths = body.storage_paths ?? [];
+    const newNames = body.file_names ?? [];
 
     const { data: existing, error: fetchErr } = await supabase
       .from('estimates')
@@ -65,102 +74,83 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Estimate not found' }, { status: 404 });
     }
 
-    const existingItems = (existing.line_items ?? []) as Array<{
-      trade: string; description: string; qty: number; unit: string; unit_price: number; total: number;
-    }>;
-    const existingSummary = existing.ai_summary ? `\n\nExisting scope summary: ${existing.ai_summary}` : '';
+    const existingItems = (existing.line_items ?? []) as EstimateLineItem[];
+    const markup = Number(existing.markup_pct ?? 10);
+    const margin = Number(existing.margin_pct ?? 8);
 
-    const contentParts: Anthropic.Messages.ContentBlockParam[] = [];
+    let updatePayload: Record<string, unknown>;
 
-    for (let i = 0; i < storage_paths.length; i++) {
-      const storagePath = storage_paths[i];
-      const fileName = file_names[i] ?? storagePath.split('/').pop();
+    if (newPaths.length > 0) {
+      // New files uploaded: analyze just those and APPEND their line items.
+      const contentParts = await buildDocContentParts(supabase, newPaths, newNames);
+      const existingSummary = existing.ai_summary ? `\n\nExisting scope summary: ${existing.ai_summary}` : '';
+      contentParts.push({
+        type: 'text',
+        text: `New files uploaded above.${existingSummary}\n\nExisting line item count: ${existingItems.length}\n\nGenerate only NEW line items not already represented.`,
+      });
 
-      const { data: fileData, error: dlError } = await supabase.storage
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8192,
+        system: [{ type: 'text', text: APPEND_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: contentParts }],
+      });
+
+      const newData = parseEstimateResponse(response);
+      const mergedItems = [...existingItems, ...(newData.line_items ?? [])];
+      const subtotal = mergedItems.reduce((s, li) => s + (li.total || 0), 0);
+
+      updatePayload = {
+        line_items: mergedItems,
+        total_amount: Math.round(subtotal * (1 + markup / 100) * (1 + margin / 100)),
+        ai_summary: [existing.ai_summary, newData.ai_summary].filter(Boolean).join(' | ') || null,
+        notes: [existing.notes, newData.notes].filter(Boolean).join('\n') || null,
+      };
+    } else {
+      // No new files: re-run the full takeoff over every document already
+      // attached to this estimate and REPLACE the line items.
+      const { data: docs } = await supabase
         .from('documents')
-        .download(storagePath);
+        .select('name, storage_path')
+        .eq('estimate_id', params.id)
+        .eq('workspace_id', auth.workspaceId)
+        .order('created_at', { ascending: true });
 
-      if (dlError || !fileData) {
-        contentParts.push({ type: 'text', text: `File ${i + 1}: ${fileName} (could not download)` });
-        continue;
+      if (!docs?.length) {
+        return NextResponse.json(
+          { error: 'No documents are attached to this estimate yet — upload plans first.' },
+          { status: 400 }
+        );
       }
 
-      const buffer = Buffer.from(await fileData.arrayBuffer());
-      const base64 = buffer.toString('base64');
-      const lowerName = fileName.toLowerCase();
+      const contentParts = await buildDocContentParts(
+        supabase,
+        docs.map(d => d.storage_path),
+        docs.map(d => d.name)
+      );
+      contentParts.push({ type: 'text', text: FULL_ESTIMATE_INSTRUCTIONS });
 
-      if (lowerName.endsWith('.pdf')) {
-        contentParts.push({
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-        } as Anthropic.Messages.ContentBlockParam);
-        contentParts.push({ type: 'text', text: `Above document is: ${fileName}` });
-      } else if (lowerName.match(/\.(png|jpg|jpeg|gif|webp)$/)) {
-        const ext = lowerName.split('.').pop()!;
-        const mediaType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-        contentParts.push({
-          type: 'image',
-          source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64 },
-        });
-        contentParts.push({ type: 'text', text: `Above image is: ${fileName}` });
-      } else {
-        contentParts.push({ type: 'text', text: `File ${i + 1}: ${fileName} (unsupported format)` });
-      }
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8192,
+        messages: [{ role: 'user', content: contentParts }],
+      });
+
+      const newData = parseEstimateResponse(response);
+      const items = newData.line_items ?? [];
+      const subtotal = items.reduce((s, li) => s + (li.total || 0), 0);
+
+      updatePayload = {
+        line_items: items,
+        total_amount: Math.round(subtotal * (1 + markup / 100) * (1 + margin / 100)),
+        ai_summary: newData.ai_summary || existing.ai_summary,
+        notes: newData.notes || existing.notes,
+      };
     }
-
-    contentParts.push({
-      type: 'text',
-      text: `New files uploaded above.${existingSummary}\n\nExisting line item count: ${existingItems.length}\n\nGenerate only NEW line items not already represented.`,
-    });
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: contentParts,
-        },
-      ],
-    });
-
-    const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
-    let newData: {
-      ai_summary?: string;
-      line_items?: Array<{ trade: string; description: string; qty: number; unit: string; unit_price: number; total: number }>;
-      markup_pct?: number;
-      notes?: string;
-    } = {};
-
-    try {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      newData = JSON.parse(match ? match[0] : rawText);
-    } catch {
-      newData = { ai_summary: 'Additional files analyzed.', line_items: [] };
-    }
-
-    const mergedItems = [...existingItems, ...(newData.line_items ?? [])];
-    const markup = existing.markup_pct ?? newData.markup_pct ?? 10;
-    const subtotal = mergedItems.reduce((s, li) => s + (li.total || 0), 0);
-    const totalAmount = Math.round(subtotal * (1 + markup / 100));
-    const combinedSummary = [existing.ai_summary, newData.ai_summary].filter(Boolean).join(' | ');
-    const combinedNotes = [existing.notes, newData.notes].filter(Boolean).join('\n');
 
     const { data: updated, error: updateErr } = await supabase
       .from('estimates')
-      .update({
-        line_items: mergedItems,
-        total_amount: totalAmount,
-        ai_summary: combinedSummary,
-        notes: combinedNotes || null,
-      })
+      .update(updatePayload)
       .eq('id', params.id)
       .eq('workspace_id', auth.workspaceId)
       .select()
@@ -168,20 +158,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-    for (let i = 0; i < storage_paths.length; i++) {
+    for (let i = 0; i < newPaths.length; i++) {
+      const docName = newNames[i] ?? newPaths[i].split('/').pop();
       await supabase.from('documents').insert({
         workspace_id: auth.workspaceId,
         bid_id: existing.bid_id || null,
         estimate_id: params.id,
-        name: file_names[i] ?? storage_paths[i].split('/').pop(),
+        name: docName,
         type: 'plans',
-        storage_path: storage_paths[i],
-        mime_type: 'application/pdf',
+        storage_path: newPaths[i],
+        mime_type: guessMimeType(docName ?? ''),
       });
     }
 
     return NextResponse.json({ data: updated });
   } catch (err: unknown) {
+    console.error('[reanalyze] error:', err);
     const message = err instanceof Error ? err.message : 'Reanalysis failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
