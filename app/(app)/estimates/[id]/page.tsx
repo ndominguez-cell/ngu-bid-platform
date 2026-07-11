@@ -47,6 +47,7 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
     line_items: Array<{ trade: string; description: string; qty: number; unit: string; unit_price: number; total: number }>;
     bid_id: string | null;
     created_at: string;
+    updated_at: string | null;
     bids: { project_name: string; city?: string; state?: string; gc_name?: string } | null;
   };
 
@@ -153,6 +154,7 @@ export default async function EstimateDetailPage({ params }: { params: { id: str
       )}
 
       <EstimateEditor
+        key={`${est.id}-${est.updated_at ?? ''}`}
         estimateId={est.id}
         initialLineItems={est.line_items ?? []}
         initialMarkup={est.markup_pct ?? defaultMarkup}
