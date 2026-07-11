@@ -8,7 +8,9 @@ it does not issue them.
 - Next.js app router (`app/(app)` authed pages, `app/(auth)` login/signup), TypeScript, Tailwind
 - Supabase: auth, Postgres with workspace-scoped RLS, `documents` storage bucket
 - Anthropic API: email bid extraction (Haiku), plan search + takeoffs (Sonnet + web search)
-- Deployed on Vercel from branch `claude/busy-rubin-jluigp` (repo owner: ndominguez-cell)
+- Deployed on Vercel (repo owner: ndominguez-cell): **production builds from `main`**.
+  Other branches (e.g. the `claude/busy-rubin-jluigp` working branch) only get
+  preview/branch deploys — changes go live by merging a PR into `main`.
 
 ## Active Supabase project
 - `ngu-bid-platform` (ref `ikdynmhgvwhfgunfeyae`, org "NGU Bid Platform", us-west-1, free tier)
@@ -49,6 +51,7 @@ in Settings → Integrations.
 - Verify with `npx tsc --noEmit` (should be clean).
 
 ## Git
-- Work happens on `claude/busy-rubin-jluigp`; the Claude GitHub app is installed
-  for push access. If push 403s through the session proxy, the fallback is a
-  user-supplied fine-grained PAT (Contents: R/W) pushed to the explicit URL.
+- Feature work happens on `claude/busy-rubin-jluigp`; to ship to production, open a
+  PR into `main` (Vercel deploys `main`, not the working branch). The Claude GitHub
+  app is installed for push access. If push 403s through the session proxy, the
+  fallback is a user-supplied fine-grained PAT (Contents: R/W) pushed to the explicit URL.
