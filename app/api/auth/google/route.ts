@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
+// Only the scopes the app actually uses: read inbox for bid detection, send
+// proposals. gmail.modify was requested but never exercised — dropped to
+// minimize the blast radius of the stored tokens.
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.modify',
 ].join(' ');
 
 export async function GET(req: NextRequest) {

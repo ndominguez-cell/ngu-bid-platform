@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 
 // POST /api/seed
-// Body: { "secret": "YOUR_SECRET" }  OR query: ?secret=YOUR_SECRET
+// Body: { "secret": "YOUR_SECRET" }
 // Seeds all 29 NGU bids — safe to re-run (upserts on id)
+
+// Constant-time secret comparison; the secret is taken from the request BODY
+// only (query params leak into access logs, proxies, and browser history).
+function secretOk(provided: unknown): boolean {
+  const expected = process.env.SEED_SECRET;
+  if (!expected || typeof provided !== 'string') return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 const BIDS = [
   { id: 'BID-2026-001', thread_id: '19e4f8f34e323330', email_received: '2026-05-22', project_name: 'Brake Masters McKinney', address: '12021 W. University Drive', city: 'McKinney', state: 'TX', gc_name: 'Novel Builders', gc_email: 'estimating@novelbuilders.com', gc_contact_name: null, gc_contact_phone: '214-884-8810', bid_due_date: '2026-06-16', bid_due_time: '2:00 PM Central', submit_to: 'estimating@novelbuilders.com', scope: 'New auto maintenance building, approximately 5,900 SF — site concrete, earthwork, utilities, landscaping, striping, and more', trades: ['Concrete','Earthwork','Utilities','Masonry','MEP','Striping','Landscaping'], plans_link: 'https://www.novelbuildersplanroom.com?accesskeyTF285741B#projects/507066', source: 'Novel', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Black concrete specified — Jet black color #860 Iron Oxide by Davis Colors, 12 lbs per 94 lbs sack of cement' },
@@ -38,18 +50,15 @@ const BIDS = [
 ];
 
 export async function POST(req: NextRequest) {
-  // Accept secret from query param OR request body
-  let secret = req.nextUrl.searchParams.get('secret');
-  if (!secret) {
-    try {
-      const body = await req.json();
-      secret = body?.secret ?? null;
-    } catch {
-      // no body or invalid JSON
-    }
+  let secret: unknown = null;
+  try {
+    const body = await req.json();
+    secret = body?.secret ?? null;
+  } catch {
+    // no body or invalid JSON
   }
 
-  if (!secret || secret !== process.env.SEED_SECRET) {
+  if (!secretOk(secret)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

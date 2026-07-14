@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { encryptSecret } from '@/lib/crypto';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -49,9 +50,10 @@ export async function GET(req: NextRequest) {
   const expiry = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
   const service = createServiceClient();
+  // Encrypt tokens at rest (defense-in-depth on top of RLS/column grants).
   const { error: updateError } = await service.from('profiles').update({
-    google_refresh_token: tokens.refresh_token,
-    google_access_token: tokens.access_token,
+    google_refresh_token: encryptSecret(tokens.refresh_token),
+    google_access_token: encryptSecret(tokens.access_token),
     google_token_expiry: expiry,
   }).eq('id', user.id);
 

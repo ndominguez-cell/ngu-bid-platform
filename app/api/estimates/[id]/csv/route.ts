@@ -23,7 +23,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const subtotal = items.reduce((s, li) => s + (li.total || 0), 0);
 
   function esc(v: string | number | null | undefined) {
-    return `"${String(v ?? '').replace(/"/g, '""')}"`;
+    let s = String(v ?? '');
+    // Neutralize spreadsheet formula injection: line items come from AI output
+    // and user edits, so a cell like =WEBSERVICE(...) would execute on open.
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return `"${s.replace(/"/g, '""')}"`;
   }
 
   const rows: Array<Array<string | number>> = [

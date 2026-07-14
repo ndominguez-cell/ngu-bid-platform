@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { encryptSecret, decryptSecret } from '@/lib/crypto';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -11,15 +12,19 @@ export async function getValidAccessToken(userId: string): Promise<string> {
     .eq('id', userId)
     .single();
 
-  if (error || !profile?.google_refresh_token) {
+  // Tokens are stored encrypted at rest (legacy plaintext passes through).
+  const refreshToken = decryptSecret(profile?.google_refresh_token);
+  const accessToken = decryptSecret(profile?.google_access_token);
+
+  if (error || !refreshToken) {
     throw new Error('Gmail not connected. Please connect Gmail in Settings.');
   }
 
-  const expiry = profile.google_token_expiry ? new Date(profile.google_token_expiry) : new Date(0);
+  const expiry = profile?.google_token_expiry ? new Date(profile.google_token_expiry) : new Date(0);
   const isExpired = expiry.getTime() - Date.now() < 60_000; // refresh 1 min early
 
-  if (!isExpired && profile.google_access_token) {
-    return profile.google_access_token;
+  if (!isExpired && accessToken) {
+    return accessToken;
   }
 
   // Refresh the access token
@@ -29,7 +34,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
     body: new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      refresh_token: profile.google_refresh_token,
+      refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
   });
@@ -43,7 +48,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   const newExpiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   await supabase.from('profiles').update({
-    google_access_token: tokens.access_token,
+    google_access_token: encryptSecret(tokens.access_token),
     google_token_expiry: newExpiry,
   }).eq('id', userId);
 

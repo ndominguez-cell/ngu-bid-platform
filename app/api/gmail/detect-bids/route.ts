@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
 import { getValidAccessToken, gmailFetch } from '@/lib/gmail';
+import { safeHttpUrl, isValidEmail } from '@/lib/validation';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 120;
@@ -70,6 +72,10 @@ function classifyDocument(filename: string): 'plans' | 'specs' | 'addendum' | 'o
 }
 
 // Generate next bid ID: BID-YYYY-NNN
+// Generate next bid ID: BID-YYYY-NNN. Takes the NUMERIC max of existing ids —
+// ordering by id text would rank BID-2026-1000 below BID-2026-999 and reissue a
+// colliding id. Callers must still handle a PK conflict on insert (concurrent
+// detect-bids runs can compute the same next id before either commits).
 async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>, workspaceId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `BID-${year}-`;
@@ -77,18 +83,20 @@ async function nextBidId(serviceClient: ReturnType<typeof createServiceClient>, 
     .from('bids')
     .select('id')
     .eq('workspace_id', workspaceId)
-    .like('id', `${prefix}%`)
-    .order('id', { ascending: false })
-    .limit(1);
-  if (!data || data.length === 0) return `${prefix}001`;
-  const last = data[0].id as string;
-  const num = parseInt(last.replace(prefix, ''), 10);
-  return `${prefix}${String(num + 1).padStart(3, '0')}`;
+    .like('id', `${prefix}%`);
+  let max = 0;
+  for (const row of data ?? []) {
+    const n = parseInt(String(row.id).slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
 }
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
   const user = auth.user;
   const workspaceId = auth.workspaceId;
 
@@ -98,10 +106,12 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+  const serviceClient = createServiceClient();
+  const limited = await enforceRateLimit(serviceClient, { userId: user.id, workspaceId, route: 'gmail-detect', rules: RATE_PRESETS.gmailScan });
+  if (limited) return limited;
 
   try {
     const accessToken = await getValidAccessToken(user.id);
-    const serviceClient = createServiceClient();
 
     // Search the last 21 days of mail (not just inbox — archived counts too),
     // matching bid keywords anywhere in the message, not only the subject.
@@ -142,7 +152,8 @@ export async function POST(req: NextRequest) {
         .select('id')
         .eq('thread_id', threadId)
         .eq('workspace_id', workspaceId)
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (existingBid) { skipped++; continue; }
 
       const body = extractBody(msgData.payload);
@@ -195,12 +206,9 @@ Return ONLY the JSON object, no other text.`;
 
       if (!bidData.is_bid) { skipped++; continue; }
 
-      const bidId = await nextBidId(serviceClient, workspaceId);
       const emailDate = new Date(internalDate).toISOString().split('T')[0];
-
-      await serviceClient.from('bids').insert({
+      const bidRow = {
         workspace_id: workspaceId,
-        id: bidId,
         thread_id: threadId,
         email_received: emailDate,
         project_name: (bidData.project_name as string) || 'Untitled Project',
@@ -208,7 +216,10 @@ Return ONLY the JSON object, no other text.`;
         city: bidData.city as string | null,
         state: (bidData.state as string) || 'TX',
         gc_name: bidData.gc_name as string | null,
-        gc_email: bidData.gc_email as string | null,
+        // Untrusted (extracted from inbound email): validate before storing —
+        // gc_email later becomes an outbound proposal recipient, and plans_link
+        // is rendered as a clickable link in our own UI.
+        gc_email: isValidEmail(bidData.gc_email) ? (bidData.gc_email as string).trim() : null,
         gc_contact_name: bidData.gc_contact_name as string | null,
         gc_contact_phone: bidData.gc_contact_phone as string | null,
         bid_due_date: bidData.bid_due_date as string | null,
@@ -216,13 +227,26 @@ Return ONLY the JSON object, no other text.`;
         proposed_start_date: bidData.proposed_start_date as string | null,
         scope: bidData.scope as string | null,
         trades: (bidData.trades as string[]) ?? [],
-        plans_link: bidData.plans_link as string | null,
+        plans_link: safeHttpUrl(bidData.plans_link),
         source: (bidData.source as string) || 'Gmail',
         status: 'New',
-      });
+      };
+
+      // Insert with a fresh id, retrying on a primary-key collision so two
+      // concurrent runs can't drop a bid by reusing the same generated id.
+      let bidId: string | null = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const candidate = await nextBidId(serviceClient, workspaceId);
+        const { error: insErr } = await serviceClient.from('bids').insert({ ...bidRow, id: candidate });
+        if (!insErr) { bidId = candidate; break; }
+        if (insErr.code === '23505') continue; // id already taken — regenerate
+        console.error('[detect-bids] bid insert failed:', insErr.message);
+        break;
+      }
+      if (!bidId) { skipped++; continue; }
 
       // Also save the email as a conversation record
-      await serviceClient.from('conversations').insert({
+      const { error: convErr } = await serviceClient.from('conversations').insert({
         workspace_id: workspaceId,
         bid_id: bidId,
         gmail_thread_id: threadId,
@@ -231,6 +255,7 @@ Return ONLY the JSON object, no other text.`;
         direction: 'inbound',
         date: internalDate,
       });
+      if (convErr) console.error('[detect-bids] conversation insert failed:', convErr.message);
 
       // Extract plan/spec attachments from the email into document storage
       const attachments = collectAttachments(msgData.payload ?? {});

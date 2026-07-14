@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { getDaysLeft, formatDate } from '@/lib/utils';
+import { safeHttpUrl } from '@/lib/validation';
 import type { Bid, BidStatus } from '@/lib/types';
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, ExternalLink, Mail, MoreHorizontal, Plus } from 'lucide-react';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -286,12 +287,12 @@ export default async function BidsPage({ searchParams }: BidsPageProps) {
                     <Td><StatusPill status={status} /></Td>
                     <Td>
                       <div className="flex items-center justify-end gap-1">
-                        {b.plans_link && (
+                        {safeHttpUrl(b.plans_link) && (
                           <a
-                            href={b.plans_link}
+                            href={safeHttpUrl(b.plans_link)!}
                             target="_blank"
                             rel="noopener noreferrer"
-                           
+
                             className="icon-btn"
                             title="View plans"
                             style={{ width: 28, height: 28 }}

@@ -1,23 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
-import Anthropic from '@anthropic-ai/sdk';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
 import {
-  FULL_ESTIMATE_INSTRUCTIONS,
-  buildDocContentParts,
-  guessMimeType,
-  parseEstimateResponse,
-} from '@/lib/estimate-ai';
+  anthropic,
+  loadPlanDocuments,
+  buildTakeoff,
+  ESTIMATOR_MODEL,
+  ESTIMATOR_SYSTEM_PROMPT,
+  ESTIMATE_SCHEMA,
+  FILES_BETA,
+  type EstimateAI,
+} from '@/lib/estimator';
 
+// Reading full plan sets with a high-capability model can take a while.
 export const maxDuration = 300;
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const supabase = createServiceClient();
+
+  const limited = await enforceRateLimit(supabase, { userId: auth.user.id, workspaceId: auth.workspaceId, route: 'estimates', rules: RATE_PRESETS.heavyAI });
+  if (limited) return limited;
 
   try {
     const body = await req.json();
@@ -27,36 +35,83 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No files provided' }, { status: 400 });
     }
 
-    const contentParts = await buildDocContentParts(
-      supabase,
-      storage_paths as string[],
-      (file_names ?? []) as string[]
-    );
-    contentParts.push({ type: 'text', text: FULL_ESTIMATE_INSTRUCTIONS });
+    // Load the actual drawings/specs so the model does a real takeoff instead
+    // of guessing from filenames.
+    const plans = await loadPlanDocuments(supabase, storage_paths as string[], file_names as string[]);
+    if (plans.blocks.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            'Could not read any of the uploaded plan documents, so no estimate was generated. ' +
+            `Skipped: ${plans.skipped.join('; ') || 'unknown'}`,
+        },
+        { status: 422 }
+      );
+    }
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
-      messages: [{ role: 'user', content: contentParts }],
+    // Pull bid context so the model knows the project scope and trades.
+    let bidContext = '';
+    if (bid_id) {
+      const { data: bid } = await supabase
+        .from('bids')
+        .select('project_name, address, city, state, scope, trades, notes')
+        .eq('id', bid_id)
+        .eq('workspace_id', auth.workspaceId)
+        .maybeSingle();
+      if (bid) {
+        bidContext = `Project: ${bid.project_name}
+Location: ${[bid.address, bid.city, bid.state].filter(Boolean).join(', ') || 'Texas'}
+Stated scope: ${bid.scope || 'see plans'}
+Trades of interest: ${(bid.trades ?? []).join(', ') || 'site work / concrete / paving'}
+GC notes: ${bid.notes || 'none'}`;
+      }
+    }
+
+    const response = await anthropic.beta.messages.create({
+      model: ESTIMATOR_MODEL,
+      max_tokens: 8000,
+      betas: [FILES_BETA],
+      system: [{ type: 'text', text: ESTIMATOR_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: ESTIMATE_SCHEMA } },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Prepare a detailed subcontractor bid takeoff for the following project. Base every quantity on the attached documents.\n\n${bidContext || 'No bid record — rely entirely on the attached documents.'}`,
+            },
+            ...plans.blocks,
+          ],
+        },
+      ],
     });
 
-    // Throws a readable error on truncated/unparseable output — the estimate
-    // is NOT saved in that case, so the UI shows the failure instead of an
-    // empty $0 estimate.
-    const estimateData = parseEstimateResponse(response);
+    // Structured output: the response is a single text block of validated JSON.
+    const rawText = response.content.find((b) => b.type === 'text')?.text ?? '{}';
+    let ai: EstimateAI;
+    try {
+      ai = JSON.parse(rawText) as EstimateAI;
+    } catch {
+      return NextResponse.json(
+        { error: 'The analysis engine returned an unreadable result — please retry.' },
+        { status: 502 }
+      );
+    }
 
-    // Start from workspace-wide estimating defaults
+    const lineItems = ai.line_items ?? [];
+    const subtotal = lineItems.reduce((sum, item) => sum + (item.total || 0), 0);
+
+    // Apply the workspace's estimating defaults (markup + margin). The model may
+    // propose a markup; otherwise fall back to the workspace default, then a constant.
     const { data: ws } = await supabase
       .from('workspaces')
       .select('default_markup_pct, default_margin_pct')
       .eq('id', auth.workspaceId)
       .maybeSingle();
-    const wsMarkup = Number(ws?.default_markup_pct ?? 10);
     const wsMargin = Number(ws?.default_margin_pct ?? 8);
-
-    const markupPct = estimateData.markup_pct ?? wsMarkup;
-    const subtotal = (estimateData.line_items ?? []).reduce((sum, item) => sum + (item.total || 0), 0);
-    const totalAmount = Math.round(subtotal * (1 + markupPct / 100) * (1 + wsMargin / 100));
+    const markup = typeof ai.markup_pct === 'number' ? ai.markup_pct : Number(ws?.default_markup_pct ?? 10);
+    const totalAmount = Math.round(subtotal * (1 + markup / 100) * (1 + wsMargin / 100));
 
     const { data: estimate, error: estError } = await supabase
       .from('estimates')
@@ -66,32 +121,42 @@ export async function POST(req: NextRequest) {
         name: name || `Estimate – ${new Date().toLocaleDateString()}`,
         status: 'Draft',
         total_amount: totalAmount,
-        markup_pct: markupPct,
+        markup_pct: markup,
         margin_pct: wsMargin,
-        notes: estimateData.notes || null,
-        ai_summary: estimateData.ai_summary || null,
-        line_items: estimateData.line_items ?? [],
+        ai_summary: ai.ai_summary || null,
+        line_items: lineItems,
       })
       .select()
       .single();
 
     if (estError) return NextResponse.json({ error: estError.message }, { status: 500 });
 
+    // Structured takeoff metadata (best-effort: never fails estimate creation if
+    // the takeoff column migration has not been applied yet).
+    const takeoff = buildTakeoff(ai, plans, new Date().toISOString());
+    const { error: takeoffErr } = await supabase
+      .from('estimates')
+      .update({ takeoff })
+      .eq('id', estimate.id)
+      .eq('workspace_id', auth.workspaceId);
+    if (takeoffErr) console.error('[estimates] takeoff update failed (run the takeoff migration):', takeoffErr.message);
+
+    // Record only the documents that were actually analyzed.
     for (let i = 0; i < (storage_paths as string[]).length; i++) {
-      const docName = (file_names as string[])[i] ?? (storage_paths[i] as string).split('/').pop();
-      await supabase.from('documents').insert({
+      const nm = (file_names as string[])[i] ?? (storage_paths[i] as string).split('/').pop();
+      const { error: docErr } = await supabase.from('documents').insert({
         workspace_id: auth.workspaceId,
         bid_id: bid_id || null,
         estimate_id: estimate.id,
-        name: docName,
+        name: nm,
         type: 'plans',
         storage_path: storage_paths[i],
-        mime_type: guessMimeType(docName ?? ''),
+        mime_type: (nm ?? '').toLowerCase().endsWith('.pdf') ? 'application/pdf' : null,
       });
+      if (docErr) console.error('[estimates] document insert failed:', docErr.message);
     }
 
-    return NextResponse.json({ ...estimate }, { status: 201 });
-
+    return NextResponse.json({ ...estimate, documents_reviewed: plans.reviewed, documents_skipped: plans.skipped }, { status: 201 });
   } catch (err: unknown) {
     console.error('Estimate error:', err);
     const message = err instanceof Error ? err.message : 'Estimate generation failed';

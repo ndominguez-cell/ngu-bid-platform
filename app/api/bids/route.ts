@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { pickBidFields, validateBidRefs } from '@/lib/bids';
 
 export async function GET() {
   const auth = await requireUser();
@@ -19,13 +20,20 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const supabase = createServiceClient();
-  const body = await req.json();
-  // Force the caller's workspace — never trust a workspace_id from the request body.
+  const body = (await req.json()) as Record<string, unknown>;
+
+  const fields = pickBidFields(body);
+  if (!fields.project_name) return NextResponse.json({ error: 'project_name is required' }, { status: 400 });
+  const refErr = await validateBidRefs(supabase, auth.workspaceId!, body, fields);
+  if (refErr) return NextResponse.json({ error: refErr }, { status: 400 });
+
   const { data, error } = await supabase
     .from('bids')
-    .insert({ ...body, workspace_id: auth.workspaceId })
+    .insert({ ...fields, workspace_id: auth.workspaceId, status: fields.status ?? 'New' })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

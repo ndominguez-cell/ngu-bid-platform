@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { formatDate, formatCurrency, getDaysLeft } from '@/lib/utils';
+import { safeHttpUrl } from '@/lib/validation';
 import type { Bid, Conversation, Estimate, Proposal } from '@/lib/types';
 import {
   ArrowLeft, ExternalLink, Mail, MapPin, Building2, Calendar, Send,
@@ -88,8 +89,8 @@ export default async function BidDetailPage({ params }: { params: { id: string }
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {bid.plans_link && (
-              <a href={bid.plans_link} target="_blank" rel="noopener noreferrer" className="btn">
+            {safeHttpUrl(bid.plans_link) && (
+              <a href={safeHttpUrl(bid.plans_link)!} target="_blank" rel="noopener noreferrer" className="btn">
                 <ExternalLink size={14} /> View Plans
               </a>
             )}

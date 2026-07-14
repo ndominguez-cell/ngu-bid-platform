@@ -14,6 +14,7 @@ interface LineItem {
   unit: string;
   unit_price: number;
   total: number;
+  basis?: string; // where the AI took the quantity from (read-only, from the plans)
 }
 
 interface EstimateEditorProps {
@@ -245,6 +246,11 @@ export default function EstimateEditor({
                       className="w-full bg-transparent border-0 outline-none rounded px-1 py-0.5"
                       style={{ color: 'var(--text)' }}
                     />
+                    {item.basis && (
+                      <p className="text-[11px] leading-snug px-1 mt-0.5" style={{ color: 'var(--text-subtle)' }}>
+                        Basis: {item.basis}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <input
