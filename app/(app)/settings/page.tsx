@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import ProfileEditor from './ProfileEditor';
 import GmailDisconnectButton from './GmailDisconnectButton';
@@ -10,9 +10,22 @@ export const revalidate = 0;
 export default async function SettingsPage({ searchParams }: { searchParams: { gmail?: string; tab?: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user!.id).single();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, title, role, gmail_synced_at')
+    .eq('id', user!.id)
+    .single();
 
-  const gmailConnected = !!profile?.google_refresh_token;
+  // Gmail connection status depends on google_refresh_token, which is no longer
+  // readable by the authenticated role (note-21 H1 fix). Read it server-side
+  // only, via the service client.
+  const service = createServiceClient();
+  const { data: creds } = await service
+    .from('profiles')
+    .select('google_refresh_token')
+    .eq('id', user!.id)
+    .single();
+  const gmailConnected = !!creds?.google_refresh_token;
   const gmailStatus = searchParams.gmail;
   const activeTab = searchParams.tab ?? 'general';
 

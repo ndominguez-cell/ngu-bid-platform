@@ -4,7 +4,7 @@
 
 export type BidStatus = 'New' | 'Reviewing' | 'Active' | 'Submitted' | 'Won' | 'Lost' | 'Declined' | 'Expired';
 export type EstimateStatus = 'Draft' | 'In Review' | 'Approved' | 'Submitted' | 'Archived';
-export type ProposalStatus = 'Draft' | 'Reviewed' | 'Sent' | 'Declined';
+export type ProposalStatus = 'Draft' | 'Reviewed' | 'Sent' | 'Declined' | 'Sending';
 export type CompanyType = 'GC' | 'Owner' | 'Architect' | 'Engineer' | 'Subcontractor' | 'Other';
 export type UserRole = 'admin' | 'estimator' | 'viewer';
 export type ActivityType = 'status_change' | 'note' | 'email_sent' | 'call' | 'file_upload' | 'estimate_created' | 'proposal_sent';
@@ -35,6 +35,8 @@ export interface Bid {
   proposed_start_date: string | null;
   our_bid_amount: number | null;
   awarded_amount: number | null;
+  loss_reason: string | null;
+  decided_at: string | null; // ISO timestamp when the outcome was recorded
   notes: string | null;
   created_at: string;
   updated_at: string;

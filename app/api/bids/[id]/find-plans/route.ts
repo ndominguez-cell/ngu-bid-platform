@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
+import { safeHttpUrl } from '@/lib/validation';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 300;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Current-generation model + web tools. web_search_20260209 / web_fetch_20260209
+// add dynamic filtering (results are filtered by code before hitting context) and
+// let the model actually OPEN candidate plan rooms to verify them, instead of
+// judging a document from a search snippet alone.
+const PLAN_FINDER_MODEL = 'claude-opus-4-8';
 
 const SYSTEM_PROMPT = `You are a construction bid plan document finder for NGU Construction, a site work and paving subcontractor in San Antonio, Texas.
 
@@ -44,8 +52,9 @@ Texas-specific sources to always check for Texas public projects:
 - City and county .gov procurement pages
 - QuestCDN, PlanHub, BidSync free listing pages (project metadata without paywall)
 
-Verification: A document is confirmed only when it matches at least TWO anchors:
+Verification: Before reporting a document as "found", use the web_fetch tool to OPEN the candidate URL and confirm it actually contains the plans/specs (not just a listing page). A document is confirmed only when the fetched page matches at least TWO anchors:
 (project name OR bid number OR owner name OR site address OR engineer firm OR bid due date)
+Only report result "Found complete docs" or confidence "high" when you have fetched and verified the document. If you could only find it in search results but could not open it, report "Partial docs" or "Gated only" with lower confidence.
 
 Do NOT bypass paywalls or authentication. If docs are gated, report the plan room name and recommend the user request access.
 
@@ -71,15 +80,14 @@ After searching, respond with ONLY a valid JSON object (no markdown, no commenta
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
-
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: 'AI is not configured: ANTHROPIC_API_KEY is missing from the deployment environment variables.' },
-      { status: 500 }
-    );
-  }
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
 
   const serviceClient = createServiceClient();
+
+  const limited = await enforceRateLimit(serviceClient, { userId: auth.user.id, workspaceId: auth.workspaceId, route: 'find-plans', rules: RATE_PRESETS.heavyAI });
+  if (limited) return limited;
+
   const { data: bid, error: bidError } = await serviceClient
     .from('bids')
     .select('*')
@@ -109,19 +117,20 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
     let fullText = '';
     let attempts = 0;
     const maxAttempts = 8;
-    // Stay under serverless function limits: stop starting new rounds after 220s
-    const deadline = Date.now() + 220_000;
 
     // Run Claude with web search, looping to handle multi-turn tool use
     let messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
 
-    while (attempts < maxAttempts && Date.now() < deadline) {
+    while (attempts < maxAttempts) {
       attempts++;
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: PLAN_FINDER_MODEL,
         max_tokens: 2000,
         system: SYSTEM_PROMPT,
-        tools: [{ type: 'web_search_20260209' as const, name: 'web_search', max_uses: 8 }],
+        tools: [
+          { type: 'web_search_20260209' as const, name: 'web_search' },
+          { type: 'web_fetch_20260209' as const, name: 'web_fetch' },
+        ],
         messages,
       });
 
@@ -167,11 +176,14 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
 
     const report = JSON.parse(match[0]);
 
-    // Auto-save a high-confidence plans URL back to the bid if not already set
-    if (report.plans_url && !bid.plans_link && report.confidence === 'high') {
+    // Auto-save a high-confidence plans URL back to the bid if not already set.
+    // The URL comes from the model + web search, so validate the scheme before
+    // storing (it will be rendered as a clickable link).
+    const safeUrl = safeHttpUrl(report.plans_url);
+    if (safeUrl && !bid.plans_link && report.confidence === 'high') {
       await serviceClient
         .from('bids')
-        .update({ plans_link: report.plans_url, updated_at: new Date().toISOString() })
+        .update({ plans_link: safeUrl, updated_at: new Date().toISOString() })
         .eq('id', params.id)
         .eq('workspace_id', auth.workspaceId);
       report.auto_saved = true;
@@ -179,12 +191,7 @@ Search for publicly available plan documents using the 5-tier search ladder. Ret
 
     return NextResponse.json(report);
   } catch (err: unknown) {
-    let message = err instanceof Error ? err.message : 'Plan search failed';
-    if (err instanceof Anthropic.AuthenticationError) {
-      message = 'AI authentication failed — the ANTHROPIC_API_KEY on the deployment is invalid or revoked.';
-    } else if (err instanceof Anthropic.RateLimitError) {
-      message = 'AI rate limit reached — wait a minute and try again.';
-    }
+    const message = err instanceof Error ? err.message : 'Plan search failed';
     console.error('[find-plans] error:', message, err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

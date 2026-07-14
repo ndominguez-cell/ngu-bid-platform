@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth';
+import { requireUser, forbidNonWriter } from '@/lib/auth';
+import { enforceRateLimit, RATE_PRESETS } from '@/lib/ratelimit';
+import { isValidEmail } from '@/lib/validation';
 import { getValidAccessToken, gmailFetch, buildMimeMessage } from '@/lib/gmail';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
+  const denied = forbidNonWriter(auth.role);
+  if (denied) return denied;
   const user = auth.user;
 
   const serviceClient = createServiceClient();
+
+  const limited = await enforceRateLimit(serviceClient, { userId: user.id, workspaceId: auth.workspaceId, route: 'proposal-send', rules: RATE_PRESETS.send });
+  if (limited) return limited;
 
   const { data: proposal, error: propErr } = await serviceClient
     .from('proposals')
@@ -22,7 +29,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const bid = proposal.bids as { gc_email: string | null; gc_name: string | null; project_name: string } | null;
   const toEmail = bid?.gc_email;
-  if (!toEmail) return NextResponse.json({ error: 'No recipient email on bid' }, { status: 400 });
+  // Recipient is derived from email-extracted data — validate before sending our
+  // bid amounts to it.
+  if (!isValidEmail(toEmail)) return NextResponse.json({ error: 'No valid recipient email on bid' }, { status: 400 });
+
+  // Atomically claim the proposal so a double-click can't send it twice: only
+  // one request will match status not in (Sent, Sending) and flip it to Sending.
+  const prevStatus = proposal.status as string;
+  const { data: claimed, error: claimErr } = await serviceClient
+    .from('proposals')
+    .update({ status: 'Sending' })
+    .eq('id', params.id)
+    .eq('workspace_id', auth.workspaceId)
+    .neq('status', 'Sent')
+    .neq('status', 'Sending')
+    .select('id')
+    .maybeSingle();
+  // If the claim errored, the 'Sending' status likely isn't in the check
+  // constraint yet (migration not applied) — fall back to the non-atomic guard
+  // (status !== 'Sent', already checked above) rather than block all sends.
+  const claimedLock = !claimErr;
+  if (!claimErr && !claimed) return NextResponse.json({ error: 'Already sending or sent' }, { status: 409 });
 
   try {
     const accessToken = await getValidAccessToken(user.id);
@@ -66,6 +93,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     return NextResponse.json({ success: true, thread_id: threadId });
   } catch (err: unknown) {
+    // Release the claim so the user can retry after a failed send (only if we
+    // actually set the 'Sending' lock).
+    if (claimedLock) {
+      await serviceClient
+        .from('proposals')
+        .update({ status: prevStatus })
+        .eq('id', params.id)
+        .eq('workspace_id', auth.workspaceId)
+        .eq('status', 'Sending');
+    }
     const message = err instanceof Error ? err.message : 'Send failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
