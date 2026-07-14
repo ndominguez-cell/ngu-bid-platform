@@ -35,6 +35,8 @@ export interface Bid {
   proposed_start_date: string | null;
   our_bid_amount: number | null;
   awarded_amount: number | null;
+  loss_reason: string | null;
+  decided_at: string | null; // ISO timestamp when the outcome was recorded
   notes: string | null;
   created_at: string;
   updated_at: string;

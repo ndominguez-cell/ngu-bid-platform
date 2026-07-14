@@ -5,8 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import type { EstimateLineItem } from '@/lib/types';
 
 type Step = 'upload' | 'uploading' | 'processing' | 'review';
+type EstimateResult = {
+  id: string;
+  ai_summary?: string | null;
+  line_items?: EstimateLineItem[];
+  total_amount?: number | null;
+};
 
 function NewEstimateContent() {
   const router = useRouter();
@@ -19,8 +26,7 @@ function NewEstimateContent() {
   const [estimateName, setEstimateName] = useState('');
   const [dragging, setDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<EstimateResult | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -111,7 +117,7 @@ function NewEstimateContent() {
         throw new Error(`Server error: ${text.substring(0, 200)}`);
       }
       if (!res.ok) throw new Error((data.error as string) || `Error ${res.status}`);
-      setResult(data);
+      setResult(data as EstimateResult);
       setStep('review');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Estimate generation failed';
