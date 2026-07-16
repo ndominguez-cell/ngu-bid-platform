@@ -40,7 +40,7 @@ export default function SignupPage() {
           <h2 className="text-lg font-bold text-[#1a3a5c] mb-2">Account created!</h2>
           <p className="text-sm text-gray-500 mb-4">
             Check your email to confirm your account, then{' '}
-            <a href="/login" className="text-[#1a3a5c] font-semibold hover:text-[#e87722]">sign in</a>.
+            <a href={`/login${typeof window !== 'undefined' ? window.location.search : ''}`} className="text-[#1a3a5c] font-semibold hover:text-[#e87722]">sign in</a>.
           </p>
         </div>
       </div>
