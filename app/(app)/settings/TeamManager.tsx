@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Users, Shield, Eye, Pencil } from 'lucide-react';
+import { Loader2, Users, Shield, Eye, Pencil, Mail, Copy, Send, Trash2, Check } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 
 interface TeamMember {
@@ -11,6 +11,14 @@ interface TeamMember {
   title: string | null;
   role: UserRole;
   created_at: string;
+}
+
+interface Invitation {
+  id: string;
+  email: string;
+  role: UserRole;
+  token: string;
+  expires_at: string;
 }
 
 const ROLE_INFO: Record<UserRole, { label: string; icon: React.ReactNode; bg: string; color: string; desc: string }> = {
@@ -42,6 +50,13 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
+  const [invites, setInvites] = useState<Invitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<UserRole>('admin');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [lastLink, setLastLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,7 +73,16 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadInvites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/team/invite');
+      if (!res.ok) return;
+      const data = await res.json();
+      setInvites(data.invitations ?? []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { load(); loadInvites(); }, [load, loadInvites]);
 
   async function updateRole(userId: string, role: UserRole) {
     setSaving(userId);
@@ -76,6 +100,43 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
     } finally {
       setSaving(null);
     }
+  }
+
+  async function sendInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviting(true);
+    setInviteError('');
+    setLastLink(null);
+    try {
+      const res = await fetch('/api/team/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not send invite');
+      setLastLink(data.link ?? null);
+      setInviteEmail('');
+      await loadInvites();
+    } catch (err: unknown) {
+      setInviteError(err instanceof Error ? err.message : 'Could not send invite');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function revokeInvite(id: string) {
+    try {
+      const res = await fetch(`/api/team/invite?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) setInvites(prev => prev.filter(i => i.id !== id));
+    } catch { /* ignore */ }
+  }
+
+  function copyLink(link: string) {
+    navigator.clipboard?.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
   }
 
   if (loading) {
@@ -122,6 +183,75 @@ export default function TeamManager({ currentUserId }: { currentUserId: string }
             <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{info.desc}</p>
           </div>
         ))}
+      </div>
+
+      <div className="mb-5 p-4 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Mail size={14} style={{ color: 'var(--navy)' }} />
+          <h3 className="label-mono text-[11px]" style={{ color: 'var(--navy)' }}>Invite Collaborator</h3>
+        </div>
+        <form onSubmit={sendInvite} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="email"
+            required
+            value={inviteEmail}
+            onChange={e => setInviteEmail(e.target.value)}
+            placeholder="name@company.com"
+            className="flex-1 text-sm rounded-lg px-3 py-2 outline-none"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+          />
+          <select
+            value={inviteRole}
+            onChange={e => setInviteRole(e.target.value as UserRole)}
+            className="text-sm rounded-lg px-3 py-2 outline-none cursor-pointer"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
+          >
+            <option value="admin">Admin</option>
+            <option value="estimator">Estimator</option>
+            <option value="viewer">Viewer</option>
+          </select>
+          <button
+            type="submit"
+            disabled={inviting}
+            className="inline-flex items-center justify-center gap-1.5 text-sm font-bold px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-50"
+            style={{ background: 'var(--navy)' }}
+          >
+            {inviting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            Invite
+          </button>
+        </form>
+
+        {inviteError && (
+          <p className="text-[11px] mt-2" style={{ color: 'var(--bad)' }}>{inviteError}</p>
+        )}
+
+        {lastLink && (
+          <div className="mt-3 p-2.5 rounded-lg flex items-center gap-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <span className="text-[11px] flex-1 truncate" style={{ color: 'var(--text-muted)' }}>{lastLink}</span>
+            <button
+              onClick={() => copyLink(lastLink)}
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full shrink-0"
+              style={{ background: 'var(--info-soft)', color: 'var(--info)' }}
+            >
+              {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? 'Copied' : 'Copy link'}
+            </button>
+          </div>
+        )}
+
+        {invites.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {invites.map(inv => (
+              <div key={inv.id} className="flex items-center gap-2 text-[11px] px-2.5 py-1.5 rounded-lg" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <span className="flex-1 truncate" style={{ color: 'var(--text)' }}>{inv.email}</span>
+                <span className="capitalize" style={{ color: 'var(--text-subtle)' }}>{inv.role}</span>
+                <span style={{ color: 'var(--text-subtle)' }}>&middot; pending</span>
+                <button onClick={() => revokeInvite(inv.id)} title="Revoke" className="shrink-0" style={{ color: 'var(--text-subtle)' }}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
