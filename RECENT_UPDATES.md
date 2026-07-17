@@ -1,48 +1,50 @@
-# Recent Updates — NGU Bid Platform
+# Recent updates — NGU Bid Platform
 
-*Plain-language log of what's been built and pushed, for quick partner review. Newest at top. Generated from the actual git history on 2026-06-10.*
+Plain-language project status, newest first. “Pending” means the work is not on
+`main` and is not part of the deployed application.
 
-> **How to read this:** "Live on `main`" = pushed and deployed. "Pending" = built but not yet merged into `main` (won't appear on the live site until merged via a pull request).
+## Pending partner review
 
----
+### 2026-07-17 — M1 security closeout
 
-## Pending — not yet on `main` (awaiting review + merge)
+- Replaced the 29 production-derived seed bids with synthetic companies,
+  contacts, projects, notes, and `.test` plan links on
+  `security/scrub-seed-pii`.
+- Removed both embedded credential-bearing URLs from the seed fixture branch.
+  The old plan-room key is confirmed dead; external expiration of the historic
+  SharePoint bearer link remains a human follow-up.
+- Added a dependency-free six-test tenant suite covering core record RLS,
+  invitation workspace scope, role-escalation resistance, advisor policies,
+  service-only tables, and all 17 requested foreign-key indexes.
+- Added `20260717120000_advisor_hardening.sql` for partner review only. It was
+  not applied to any Supabase project.
+- Refreshed the README, handoff, and closeout notes. No branch was pushed or
+  merged by this work.
 
-**Design refresh** *(branch `claude/amazing-darwin-Fiisg`, built 2026-05-27)*
-A visual overhaul to make the app cleaner and more consistent: a new set of reusable interface pieces (status tags, urgency badges, KPI tiles, notification bell, top bar), and redesigned Estimate and Proposal detail pages. Also a behind-the-scenes config tidy-up. Verified to merge cleanly and pass type-checking. **Next step:** open a pull request, review the preview, then merge. See `nickdom0923AgentNotes/09_BRANCH_RESOLUTION_2026-06-10.md`.
+### 2026-07-16 — Invite collaborator feature
 
----
+- The existing invite branch adds pending invitations, accept-by-token, and
+  team settings UI.
+- Its invitation-table migration is already present in the live database while
+  the application code remains off `main`. This is the current repo/database
+  drift to reconcile first.
 
-## Live on `main`
+## On `main`
 
-### 2026-05-27 — Plan Finder
-- For bids that arrive without a plan link, the app now uses Claude web search to go find the plans automatically (with a longer time allowance so the search can complete).
+### Through 2026-07-14 — Security and feedback-loop integration
 
-### 2026-05-27 — Phase 3: Analytics, smarter Gmail, exports, roles, mobile
-- Analytics views, automatic bid detection from Gmail, PDF export of documents, user roles (owner / manager / viewer), and a mobile-friendly layout.
+- Workspace scoping and member-based RLS protect business data and storage.
+- API routes authenticate service-role operations and scope them to a workspace.
+- Estimate takeoff, rate limiting, security follow-ups, and bid outcome feedback
+  are represented in the current mainline code and migration history.
 
-### 2026-05-27 — Estimate generation reliability
-- Several fixes so AI estimates generate dependably within the hosting time limits (model and timeout tuning, safer error handling).
+## Next
 
-### 2026-05-27 — Large file uploads
-- Raised the upload size limit and routed large PDFs straight to secure storage so they aren't blocked by the host's size cap.
+1. Partner reviews and lands the seed scrub.
+2. Partner lands the invite code to match the already-applied invitation schema.
+3. Partner reviews, then explicitly applies the advisor-hardening migration.
+4. Owner decides whether the private repository's history should be rewritten.
+5. Start M2: cost observations, public-data ingestion, and a small takeoff eval.
 
-### 2026-05-27 — Settings
-- Editable profile, and a button to disconnect Gmail.
-
-### 2026-05-27 — Phase 2: Gmail, notifications, estimate editor
-- Gmail integration, real-time notifications, an estimate editor, and conversation history.
-
-### 2026-05-26 — Foundation
-- Added missing pages and fixed the data-seeding route.
-
----
-
-## What's queued next (not built yet)
-
-1. **Branch cleanup** — delete two stale branches, merge the design refresh via PR (commands in `nickdom0923AgentNotes/09_BRANCH_RESOLUTION_2026-06-10.md`).
-2. **Security hardening before a second customer** — three fixes from `nickdom0923AgentNotes/08_PRODUCTIZATION_PUNCHLIST.md`: lock down the API routes, stop self-service role changes, and enforce per-company data isolation (RLS).
-
----
-
-*Keep this file current: add a short, plain-language bullet each time meaningful work is pushed to `main`. It's the fastest way for either partner to see where things stand without reading code.*
+Remote branch deletion is not part of this closeout. Only local stale-branch
+cleanup is recommended after the partner confirms the review branches landed.

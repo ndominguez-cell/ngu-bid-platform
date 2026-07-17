@@ -1,140 +1,66 @@
-# NGU Bid Platform — Session Handoff
+# NGU Bid Platform — M1 handoff
 
-**Date:** 2026-06-04  
-**Branch:** `claude/amazing-darwin-Fiisg` (merged to `main`)  
-**Deployment:** `dpl_CCoqnbyh4k8qxpko75uMuENSvasY` — **READY** on production (`ngu-bid-platform.vercel.app`)
+**Updated:** 2026-07-17
 
----
+**Base:** `main` at `096340f`
 
-## What Was Fixed: MIDDLEWARE_INVOCATION_FAILED (500 on every request)
+**Deployment action taken:** none
 
-### Root Cause (took several rounds to find)
+**Database action taken:** none
 
-Next.js 14.2.x compiles the Edge middleware bundle with `node:async_hooks` listed as a webpack **external**:
+## Outcome
 
-```js
-// in the compiled .next/server/middleware.js
-67: e => { e.exports = require("node:async_hooks") }
-```
+M1 is implemented as local review branches. The production-derived seed data
+has a synthetic replacement, the invitation flow has local tenant/role guards,
+the tenant-isolation suite passes without a live database, and all requested
+Supabase advisor remediations are represented in one new migration file.
 
-Vercel's Edge bundler resolves that external by pulling in the **real Node.js `async_hooks` source**, which internally references `__dirname`. Since `__dirname` is undefined in the Edge runtime (V8 isolate, no Node.js globals), every request throws:
+Nothing from this closeout was pushed, merged to `main`, deployed, or applied
+to Supabase.
 
-```
-ReferenceError: __dirname is not defined
-→ 500 MIDDLEWARE_INVOCATION_FAILED
-```
+## Branch state
 
-### Why Earlier Fixes Didn't Work
-
-| Attempt | What we tried | Why it failed |
+| Branch | Contents | State |
 |---|---|---|
-| Fix 1 | Null-guard on missing `SUPABASE_ANON_KEY` | Wrong diagnosis — env var wasn't the issue |
-| Fix 2 | Try-catch around Supabase auth call | `__dirname` throws at module load time, before try-catch |
-| Fix 3 | Removed `@supabase/ssr` from middleware entirely | Correct partial fix — cut bundle 82 kB → 26.6 kB, but `node:async_hooks` (used by Next.js's own instrumentation hook) still remained |
+| `security/scrub-seed-pii` | 29 synthetic bid fixtures; embedded credential URLs removed | Local commit `022f6e0`; partner review required |
+| `feat/invite-collaborator` | Existing invite UI, API routes, and invitation migration | Migration already live; code still not on `main` |
+| `test/tenant-isolation` | Invite prerequisite, executable tenant tests, invite role defense, advisor migration, closeout docs | Local review branch; do not apply migration yet |
 
-### The Actual Fix (`next.config.mjs`)
+The test branch carries the existing invite change so its endpoint tests and
+migration chain are self-contained. If the invite branch lands first, Git can
+reduce the remaining review to the test/hardening delta.
 
-For `nextRuntime === 'edge'`, replace the `"commonjs node:async_hooks"` entry in webpack's externals with a `"var (expr)"` that evaluates to an inline object backed by `globalThis.AsyncLocalStorage` (which IS available in Vercel Edge):
+## Known drift and security state
 
-```js
-webpack: (config, { nextRuntime }) => {
-  if (nextRuntime === 'edge') {
-    if (Array.isArray(config.externals)) {
-      config.externals = config.externals.map((ext) => {
-        if (ext && typeof ext === 'object' && !Array.isArray(ext) && typeof ext.then === 'undefined') {
-          const patched = { ...ext };
-          const edgeShim =
-            'var ({"AsyncLocalStorage":globalThis.AsyncLocalStorage,' +
-            '"AsyncResource":globalThis.AsyncResource,' +
-            '"createHook":function(){return{enable:function(){},disable:function(){}}},' +
-            '"executionAsyncId":function(){return 0},' +
-            '"triggerAsyncId":function(){return 0}})';
-          if ('node:async_hooks' in patched) patched['node:async_hooks'] = edgeShim;
-          if ('async_hooks' in patched) patched['async_hooks'] = edgeShim;
-          return patched;
-        }
-        return ext;
-      });
-    }
-  }
-  return config;
-},
+- `20260716120000_workspace_invitations.sql` is already applied to the live
+  database. Until the invite code lands, the live schema is ahead of `main`.
+- `20260717120000_advisor_hardening.sql` is file-only. It has not been applied.
+- `main` still contains the old production-derived seed file. The scrub exists
+  only on `security/scrub-seed-pii` until the partner lands it.
+- The old plan-room access key was verified dead on 2026-07-17. The historical
+  SharePoint bearer link should still be expired by its owner if it remains
+  active. Both URLs are absent from the synthetic seed branch.
+- Git history still contains the removed data. History rewriting is a separate
+  owner decision and was intentionally not attempted.
+
+## Verification completed
+
+```text
+npm test                                      PASS (6/6)
+npx tsc --noEmit --incremental false          PASS
 ```
 
-**Result:** `require("node:async_hooks")` is completely eliminated from the compiled middleware bundle. Zero `__dirname` references. Middleware bundle stays at ~26.6 kB.
+The final build, PII scan, per-branch logs, status, and no-push checks are in
+`nickdom0923AgentNotes/26_M1_CLOSEOUT_2026-07-17.md`.
 
----
+## Partner next step
 
-## What Else Was Done (Earlier in Session)
+Review the closeout report, land the seed scrub first, reconcile the invite
+code with the already-applied migration, then review the advisor SQL before
+running it. No migration in this handoff should be applied automatically.
 
-### Design System Migration
-All 11 pages/components migrated to OKLCH CSS variables — no more hardcoded `#1a3a5c`, `#e87722`, `bg-gray-*`, or `bg-white rounded-xl shadow-sm`. Uses:
-- `--navy`, `--orange`, `--surface`, `--surface-2`, `--surface-3`
-- `--border`, `--border-strong`, `--text`, `--text-muted`, `--text-subtle`
-- `--ok/--warn/--bad/--info` with `-soft` variants
-- `.card`, `.btn`, `.btn-primary`, `.btn-accent`, `.btn-ghost`, `.btn-sm`, `.label-mono`
+## M2 after M1 lands
 
-### New API Routes
-- `GET /api/estimates/[id]/csv` — downloads line items as CSV with subtotal/markup/grand total rows
-- `POST /api/estimates/[id]/reanalyze` — accepts `{storage_paths, file_names}`, runs Claude on new plan files, merges line items into existing estimate without losing prior work
-- `export const maxDuration = 60` on AI routes
-
-### New Client Components
-- `app/(app)/estimates/[id]/EstimateUploadButton.tsx` — presign → direct Supabase upload → reanalyze flow with progress display
-- `app/(app)/proposals/[id]/ProposalRedraftButton.tsx` — calls `POST /api/proposals/draft`, navigates to new proposal
-
-### Database Schema
-`supabase/migrations/20260101000000_initial_schema.sql` — complete idempotent schema:
-- 9 tables: `bids`, `bid_activity`, `companies`, `contacts`, `documents`, `estimates`, `proposals`, `conversations`, `profiles`
-- RLS policies (authenticated full access)
-- `updated_at` triggers
-- Storage bucket `documents` (private, 100 MB limit, PDF/image MIME types)
-
----
-
-## Still Needed Before App Is Usable
-
-The app will render a login page but all features requiring DB/AI will fail until these are configured in Vercel:
-
-| Variable | Where to get it | Status |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Dashboard → Settings → API → "anon public" | **MISSING** |
-| `ANTHROPIC_API_KEY` | console.anthropic.com/settings/keys | **MISSING** |
-| `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials | Optional |
-| `GOOGLE_CLIENT_SECRET` | Same | Optional |
-
-**After adding env vars:**
-1. Trigger a redeploy in Vercel (or it will auto-deploy on next push)
-2. Run the schema SQL in Supabase SQL Editor (file: `supabase/migrations/20260101000000_initial_schema.sql`)
-3. Create an account at the app URL
-4. Seed test data: `POST https://ngu-bid-platform.vercel.app/api/seed` with body `{"secret":"ngu-seed-2026"}`
-
----
-
-## Key Files
-
-```
-middleware.ts                          ← Edge auth routing (cookie check only, no @supabase/ssr)
-next.config.mjs                        ← async_hooks Edge shim (the critical fix)
-lib/supabase/server.ts                 ← createClient() / createServiceClient()
-supabase/migrations/                   ← Full DB schema
-app/api/estimates/[id]/csv/route.ts    ← CSV export
-app/api/estimates/[id]/reanalyze/      ← AI re-analysis
-app/api/proposals/draft/               ← AI proposal generation
-app/(app)/estimates/[id]/              ← Estimate detail + EstimateUploadButton
-app/(app)/proposals/[id]/              ← Proposal detail + ProposalRedraftButton
-```
-
----
-
-## Commit History (this session)
-
-```
-1fc06f8  Fix MIDDLEWARE_INVOCATION_FAILED: shim node:async_hooks for Edge runtime
-f472d6d  Fix middleware: remove @supabase/ssr to eliminate __dirname Edge crash
-c90bfba  Wrap middleware in try-catch to prevent MIDDLEWARE_INVOCATION_FAILED
-71f3ac2  Fix middleware crash when SUPABASE_ANON_KEY env var is not set
-9559446  Add supabase/migrations with complete idempotent schema
-fa6291c  Implement missing features: CSV export, plan re-upload, proposal re-draft
-355b7ab  Design system pass 3: migrate all remaining pages to CSS variables
-```
+Build the first data-backed estimating loop: workspace-owned cost observations,
+a small takeoff evaluation set, public-data ingestion, and estimate suggestions
+with model fallback. Cross-tenant benchmarks and price optimization remain M3.
