@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { buildAcceptedMembership } from '@/lib/invitations.mjs';
 
 // Profiles.role is a coarser enum than workspace_members.role; map before sync.
 function toProfileRole(role: string): 'admin' | 'estimator' | 'viewer' {
@@ -75,19 +76,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const membership = buildAcceptedMembership(invite, user.id);
+  if (!membership) {
+    return NextResponse.json({ error: 'This invitation has an invalid role' }, { status: 403 });
+  }
+
   // Ensure a profile row exists (the signup trigger normally makes it).
   await service.from('profiles').upsert({ id: user.id }, { onConflict: 'id' });
 
   const { error: memErr } = await service
     .from('workspace_members')
     .upsert(
-      { workspace_id: invite.workspace_id, user_id: user.id, role: invite.role },
+      membership,
       { onConflict: 'workspace_id,user_id' },
     );
   if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
 
   // Keep the UI-facing profiles.role in sync, matching /api/team's convention.
-  await service.from('profiles').update({ role: toProfileRole(invite.role) }).eq('id', user.id);
+  await service.from('profiles').update({ role: toProfileRole(membership.role) }).eq('id', user.id);
 
   await service
     .from('workspace_invitations')

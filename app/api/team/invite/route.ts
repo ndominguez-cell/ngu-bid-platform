@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireUser, forbidNonAdmin } from '@/lib/auth';
+import {
+  buildWorkspaceInvitation,
+  isInvitableRole,
+} from '@/lib/invitations.mjs';
 import { isValidEmail } from '@/lib/validation';
-
-// Roles an admin may invite. `owner` is intentionally excluded — ownership is
-// assigned at workspace creation/backfill only, never via an invite.
-const INVITABLE_ROLES = ['admin', 'estimator', 'viewer'];
 
 function inviteLink(req: NextRequest, token: string) {
   const base = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   if (!isValidEmail(email)) {
     return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });
   }
-  if (!INVITABLE_ROLES.includes(role)) {
+  if (!isInvitableRole(role)) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
   }
 
@@ -59,13 +59,13 @@ export async function POST(req: NextRequest) {
 
   const { data: invitation, error } = await supabase
     .from('workspace_invitations')
-    .insert({
-      workspace_id: auth.workspaceId,
+    .insert(buildWorkspaceInvitation({
+      workspaceId: auth.workspaceId!,
       email,
       role,
       token,
-      invited_by: auth.user?.id ?? null,
-    })
+      invitedBy: auth.user?.id ?? null,
+    }))
     .select('id, email, role, token, created_at, expires_at')
     .single();
 
