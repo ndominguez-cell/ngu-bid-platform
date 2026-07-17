@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 // POST /api/seed
 // Body: { "secret": "YOUR_SECRET" }
-// Seeds all 29 NGU bids — safe to re-run (upserts on id)
+// Seeds 29 synthetic demo bids — safe to re-run (upserts on id)
 
 // Constant-time secret comparison; the secret is taken from the request BODY
 // only (query params leak into access logs, proxies, and browser history).
@@ -17,37 +17,387 @@ function secretOk(provided: unknown): boolean {
   return timingSafeEqual(a, b);
 }
 
-const BIDS = [
-  { id: 'BID-2026-001', thread_id: '19e4f8f34e323330', email_received: '2026-05-22', project_name: 'Brake Masters McKinney', address: '12021 W. University Drive', city: 'McKinney', state: 'TX', gc_name: 'Novel Builders', gc_email: 'estimating@novelbuilders.com', gc_contact_name: null, gc_contact_phone: '214-884-8810', bid_due_date: '2026-06-16', bid_due_time: '2:00 PM Central', submit_to: 'estimating@novelbuilders.com', scope: 'New auto maintenance building, approximately 5,900 SF — site concrete, earthwork, utilities, landscaping, striping, and more', trades: ['Concrete','Earthwork','Utilities','Masonry','MEP','Striping','Landscaping'], plans_link: 'https://www.novelbuildersplanroom.com?accesskeyTF285741B#projects/507066', source: 'Novel', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Black concrete specified — Jet black color #860 Iron Oxide by Davis Colors, 12 lbs per 94 lbs sack of cement' },
-  { id: 'BID-2026-002', thread_id: '19e4a9f83984654c', email_received: '2026-05-21', project_name: 'Boerne ISD MS South Renovation', address: null, city: 'Boerne', state: 'TX', gc_name: 'Jamail & Smith Construction LP', gc_email: 'estimating@jamailsmith.com', gc_contact_name: 'Ryland Parker / Sarah Spaulding', gc_contact_phone: '281-614-9166', bid_due_date: '2026-06-05', bid_due_time: '4:00 PM', submit_to: 'estimating@jamailsmith.com (or via Procore)', scope: 'Boerne ISD Middle School South renovation — school construction project', trades: ['Renovation','Sitework'], plans_link: 'https://jamailsmith-my.sharepoint.com/:f:/p/sspaulding/IgDpRQROfkbATZ2KLVWNtJT3AfHWYTbdJUukAwM_I-4s7mk?e=bVpM', source: 'Procore', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Contact Ryland Parker at rparker@jamailsmith.com. Plans available on Procore and SharePoint.' },
-  { id: 'BID-2026-003', thread_id: '19e463fc18adaf38', email_received: '2026-05-20', project_name: 'Woodbridge Lot 1R', address: 'McCreary Road & Farm to Market', city: null, state: 'TX', gc_name: 'Novel Builders', gc_email: 'estimating@novelbuilders.com', gc_contact_name: null, gc_contact_phone: '214-884-8810', bid_due_date: null, bid_due_time: null, submit_to: 'estimating@novelbuilders.com', scope: 'Site work at Woodbridge Lot 1R — details to be confirmed from plan room', trades: ['Sitework'], plans_link: 'https://www.novelbuildersplanroom.com', source: 'Novel', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Need to pull full email for bid due date and full scope — McCreary Rd / FM address suggests North TX (McKinney/Frisco area)' },
-  { id: 'BID-2026-004', thread_id: '19e420e7e3e8bdde', email_received: '2026-05-19', project_name: 'San Antonio Pizza Ranch', address: null, city: 'San Antonio', state: 'TX', gc_name: 'Maple Creek Construction LLC', gc_email: null, gc_contact_name: 'Corey Sass', gc_contact_phone: null, bid_due_date: '2026-05-19', bid_due_time: '2:00 PM', submit_to: null, scope: 'Pizza Ranch restaurant construction — San Antonio', trades: ['Concrete','Sitework'], plans_link: null, source: 'Procore', status: 'Expired', our_bid_amount: null, awarded_amount: null, notes: 'Bid deadline passed 05/19/2026. Was still accepting bids per email subject.' },
-  { id: 'BID-2026-005', thread_id: '19e40149267f8e21', email_received: '2026-05-19', project_name: 'SLATE OFFICE — Site Work', address: null, city: null, state: null, gc_name: 'Unknown (via Procore)', gc_email: 'notifications@us02.procoretech.com', gc_contact_name: null, gc_contact_phone: null, bid_due_date: null, bid_due_time: null, submit_to: null, scope: 'SLATE OFFICE — 02 Site Work bid package', trades: ['Sitework','Earthwork'], plans_link: null, source: 'Procore', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Multiple reminder emails received (05/19, 05/20, 05/21). Need to open Procore to get bid details and due date.' },
-  { id: 'BID-2026-006', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'COSA Emergency Services Warehouse', address: '320 S. Callaghan Rd (SAFD Campus)', city: 'San Antonio', state: 'TX', gc_name: 'City of San Antonio — Capital Delivery Dept (Direct IFB)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-05-26', bid_due_time: '2:00 PM CT', submit_to: 'CivCast portal only (https://www.civcastusa.com/bids)', scope: '~9,000 SF conditioned PEMB warehouse (Type IIB, Group S-1) for SAFD, SAPD, and Metro Health storage on 3.8-acre site. UNIT PRICE CONTRACT.', trades: ['Concrete','Structural Steel','Masonry','Earthwork','Utilities','MEP'], plans_link: 'https://www.civcastusa.com/bids', source: 'PlanHub', status: 'Reviewing', our_bid_amount: null, awarded_amount: null, notes: 'Solicitation #23-04057. UNIT PRICE CONTRACT. Budget: $5,400,000. 515 calendar days. Prevailing wages required.' },
-  { id: 'BID-2026-007', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'The Grove', address: '400 Nth 5th Street', city: 'Carrizo Springs', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-05-27', bid_due_time: '10:00 AM', submit_to: null, scope: 'Commercial construction — The Grove, Carrizo Springs TX', trades: ['Concrete','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Carrizo Springs is in Dimmit County, SW Texas.' },
-  { id: 'BID-2026-008', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Temple - Parks Maintenance Storage Expansion', address: '1701 N General Bruce Drive', city: 'Temple', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-05-31', bid_due_time: '8:00 AM', submit_to: null, scope: 'Civil/government parks maintenance storage expansion — Temple TX', trades: ['Concrete','Earthwork','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'May be same project as BID-2026-009 with different deadline — verify on PlanHub. City of Temple, Bell County.' },
-  { id: 'BID-2026-009', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Temple - Parks Maintenance Storage Expansion (Alt)', address: '1701 N General Bruce Drive', city: 'Temple', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-01', bid_due_time: '9:00 AM', submit_to: null, scope: 'Government/public parks maintenance storage expansion — Temple TX (possible alternate package)', trades: ['Concrete','Earthwork','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Same address as BID-2026-008 but different deadline (06/01 vs 05/31) — may be two separate bid packages.' },
-  { id: 'BID-2026-010', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Liberty Hill City Park Parking Lot Expansion', address: '251 CO RD 200', city: 'Liberty Hill', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-02', bid_due_time: '9:00 AM', submit_to: null, scope: 'City park parking lot expansion — concrete or asphalt paving, earthwork, striping', trades: ['Concrete','Asphalt','Paving','Earthwork','Striping'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'HIGH RELEVANCE — parking lot = concrete paving. Liberty Hill is NW of Austin in Williamson County.' },
-  { id: 'BID-2026-011', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Briscoe King Pavilion Construction & Renovation', address: '15820 Park Rd 22', city: 'Corpus Christi', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-02', bid_due_time: '10:00 AM', submit_to: null, scope: 'Pavilion construction and renovation — Padre Island / Corpus Christi area', trades: ['Concrete','Masonry','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Located at Padre Island National Seashore area (Park Rd 22).' },
-  { id: 'BID-2026-012', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Schiller Lot 3', address: '4815 Verde Vista Dr', city: 'Georgetown', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-03', bid_due_time: '8:00 AM', submit_to: null, scope: 'Commercial construction — Schiller Lot 3, Georgetown TX', trades: ['Concrete','Earthwork','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Georgetown TX, Williamson County.' },
-  { id: 'BID-2026-013', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Goodwill-Laredo', address: '1119 Guadalupe Street', city: 'Laredo', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-08', bid_due_time: '8:00 AM', submit_to: null, scope: 'Commercial Goodwill store construction — Laredo TX', trades: ['Concrete','Earthwork','Sitework','Utilities'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Laredo TX, Webb County.' },
-  { id: 'BID-2026-014', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'GMC Covered Parking and Laydown Area', address: '300 Industrial Ave #1', city: 'Georgetown', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-08', bid_due_time: '9:00 AM', submit_to: null, scope: 'Covered parking structure and laydown area — government/public facility Georgetown TX', trades: ['Concrete','Paving','Earthwork','Structural Steel'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'HIGH RELEVANCE — covered parking + laydown area = concrete/paving work. Georgetown TX, Williamson County.' },
-  { id: 'BID-2026-015', thread_id: '19e552cc95533bca', email_received: '2026-05-23', project_name: 'Early Childhood Center Classroom Additions - Gregory-Portland ISD', address: '608 College St', city: 'Portland', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-08', bid_due_time: '10:00 AM', submit_to: null, scope: 'School classroom additions at Early Childhood Center — Gregory-Portland ISD', trades: ['Concrete','Masonry','Sitework','Earthwork'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Portland TX near Corpus Christi, San Patricio County.' },
-  { id: 'BID-2026-016', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: "O'Reilly Auto Parts - Buda, TX #BU3", address: '1485 Old Goforth Road', city: 'Buda', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-05-27', bid_due_time: '11:00 AM', submit_to: null, scope: "O'Reilly Auto Parts store construction — Buda TX", trades: ['Concrete','Earthwork','Sitework','Utilities'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Buda TX, Hays County (south of Austin).' },
-  { id: 'BID-2026-017', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'VA Reconstruct Pre-Engineered Metal Building 115', address: '3600 Memorial Blvd.', city: 'Kerrville', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-05-28', bid_due_time: '12:00 PM', submit_to: null, scope: 'VA facility — reconstruct pre-engineered metal building (PEMB) #115', trades: ['Concrete','Structural Steel','Earthwork','MEP'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Veterans Affairs facility, Kerrville TX (Hill Country). Federal project. Prevailing wages likely required.' },
-  { id: 'BID-2026-018', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: '7 Brew - Helotes', address: '12405 Bandera Rd', city: 'Helotes', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-02', bid_due_time: '8:00 AM', submit_to: null, scope: '7 Brew drive-through coffee kiosk construction — Helotes TX', trades: ['Concrete','Earthwork','Sitework','Utilities'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: '7 Brew drive-through coffee chain. Helotes TX, NW San Antonio area.' },
-  { id: 'BID-2026-019', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: '7 Brew - Floresville', address: '914 10th St', city: 'Floresville', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-02', bid_due_time: '8:00 AM', submit_to: null, scope: '7 Brew drive-through coffee kiosk construction — Floresville TX', trades: ['Concrete','Earthwork','Sitework','Utilities'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Floresville TX, Wilson County. Likely same GC as BID-2026-018 (7 Brew Helotes).' },
-  { id: 'BID-2026-020', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'Connally High School Summer Modernization', address: '13212 N Lamar Blvd', city: 'Austin', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-02', bid_due_time: '10:00 AM', submit_to: null, scope: 'High school summer modernization project — Connally HS, Pflugerville ISD', trades: ['Concrete','Masonry','Sitework','Earthwork'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Pflugerville ISD, Austin TX. Likely same as BID-2026-021 — verify on PlanHub.' },
-  { id: 'BID-2026-021', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'Connally High School Summer Modernization - Pflugerville ISD', address: '13212 N Lamar Blvd', city: 'Austin', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-02', bid_due_time: '10:00 AM', submit_to: null, scope: 'High school summer modernization — Pflugerville ISD, Connally HS (Government/Public + Commercial listing)', trades: ['Concrete','Masonry','Sitework','Earthwork'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Likely duplicate of BID-2026-020 — verify on PlanHub before bidding both.' },
-  { id: 'BID-2026-022', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'PSA - Waco Outpatient Clinic', address: '9108 Jordan Lane, Building 3 - Suite 302', city: 'Woodway', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-04', bid_due_time: '10:00 AM', submit_to: null, scope: 'PSA outpatient clinic — commercial medical, Woodway TX (Waco area)', trades: ['Concrete','Sitework','MEP'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Woodway TX, suburb of Waco, McLennan County.' },
-  { id: 'BID-2026-023', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'Mission Veterinary Partners - Stagecoach Pet Hospital', address: '4826 E Stagecoach Rd', city: 'Killeen', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-04', bid_due_time: '10:00 AM', submit_to: null, scope: 'Veterinary hospital construction — Mission Veterinary Partners, Stagecoach Pet Hospital, Killeen TX', trades: ['Concrete','Earthwork','Sitework','Utilities'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Killeen TX, Bell County (near Fort Cavazos).' },
-  { id: 'BID-2026-024', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'Smoothie King - Seguin, TX', address: '1300 State Hwy TX 46', city: 'Seguin', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-05', bid_due_time: '1:00 PM', submit_to: null, scope: 'Smoothie King retail store construction — Seguin TX, Hwy 46', trades: ['Concrete','Earthwork','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Seguin TX, Guadalupe County.' },
-  { id: 'BID-2026-025', thread_id: '19e500560fab5ce9', email_received: '2026-05-22', project_name: 'JBSA Camp Bullis - Exchange Update', address: '5100 Wilkerson Road', city: 'San Antonio', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-09', bid_due_time: '8:00 AM', submit_to: null, scope: 'Military exchange update/renovation — JBSA Camp Bullis, San Antonio TX', trades: ['Concrete','Earthwork','Sitework','MEP'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'JBSA Camp Bullis — federal military facility. Prevailing wages and security requirements likely apply.' },
-  { id: 'BID-2026-026', thread_id: '19e552cc5add7c1c', email_received: '2026-05-23', project_name: '2025 CDBG Roadway Reconstruction Project', address: null, city: 'Brackettville', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-08', bid_due_time: '12:00 PM', submit_to: null, scope: 'Reconstruction of current roadways with placement of base and Type D asphalt — CDBG-funded civil project', trades: ['Earthwork','Asphalt','Paving','Grading'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'HIGH RELEVANCE — asphalt roadway reconstruction. Brackettville TX, Kinney County. CDBG = Community Development Block Grant.' },
-  { id: 'BID-2026-027', thread_id: '19e552cc5add7c1c', email_received: '2026-05-23', project_name: 'Dietz Elkhorn Road (East) Reconstruction and Water Line', address: 'Dietz Elkhorn Road (East)', city: 'Fair Oaks Ranch', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-14', bid_due_time: '10:00 AM', submit_to: null, scope: 'Roadway reconstruction and utility improvements (water line) along Dietz Elkhorn Road East', trades: ['Earthwork','Paving','Utilities','Grading'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'HIGH RELEVANCE — road reconstruction + water line. Fair Oaks Ranch TX, NW San Antonio area.' },
-  { id: 'BID-2026-028', thread_id: '19e552cc5add7c1c', email_received: '2026-05-23', project_name: 'Hartrick Bluff Reconstruction - FM 93 Improvements and Traffic Signalization', address: 'FM 93 (Waters Dairy Rd to FM 93)', city: 'Temple', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-15', bid_due_time: '10:30 AM', submit_to: null, scope: '~6,200 LF of 40-ft wide two-lane roadway construction with traffic signalization — FM 93 to Waters Dairy Rd', trades: ['Earthwork','Paving','Concrete','Grading','Utilities'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'HIGH RELEVANCE — large road project (~6,200 LF roadway). Temple TX, Bell County. Significant earthwork and paving opportunity.' },
-  { id: 'BID-2026-029', thread_id: '19e552cc5add7c1c', email_received: '2026-05-23', project_name: 'Granger MacDonald Park Project', address: null, city: 'Kerrville', state: 'TX', gc_name: 'Unknown (via PlanHub)', gc_email: null, gc_contact_name: null, gc_contact_phone: null, bid_due_date: '2026-06-23', bid_due_time: '11:00 AM', submit_to: null, scope: 'Renovation/remodel/repair of existing park/playground — Government/Public project', trades: ['Concrete','Earthwork','Sitework'], plans_link: null, source: 'PlanHub', status: 'New', our_bid_amount: null, awarded_amount: null, notes: 'Kerrville TX, Kerr County (Hill Country). Park renovation likely includes concrete flatwork, site grading, utilities.' },
+type SeedBid = {
+  id: string;
+  thread_id: string;
+  email_received: string;
+  project_name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  gc_name: string;
+  gc_email: string | null;
+  gc_contact_name: string | null;
+  gc_contact_phone: string | null;
+  bid_due_date: string | null;
+  bid_due_time: string | null;
+  submit_to: string | null;
+  scope: string;
+  trades: string[];
+  plans_link: string | null;
+  source: string;
+  status: 'New' | 'Reviewing' | 'Expired';
+  our_bid_amount: number | null;
+  awarded_amount: number | null;
+  notes: string;
+};
+
+type BidFixture = Pick<SeedBid, 'project_name' | 'scope' | 'trades'> &
+  Partial<Omit<SeedBid, 'id' | 'thread_id' | 'project_name' | 'scope' | 'trades' | 'our_bid_amount' | 'awarded_amount'>>;
+
+const SYNTHETIC_GCS = [
+  'Blue Oak Contractors',
+  'Copper Star Builders',
+  'Pine and Prairie Construction',
+  'Horizon Beam Group',
+] as const;
+
+const FIXTURES: BidFixture[] = [
+  {
+    project_name: 'Demo Auto Service Center',
+    address: '101 Example Parkway',
+    city: 'Example City',
+    gc_email: 'estimating@example.com',
+    gc_contact_phone: '210-555-0101',
+    submit_to: 'estimating@example.com',
+    scope: 'New 5,900 SF auto service building with site concrete, earthwork, utilities, landscaping, and striping.',
+    trades: ['Concrete', 'Earthwork', 'Utilities', 'Masonry', 'MEP', 'Striping', 'Landscaping'],
+    plans_link: 'https://example-planroom.test/projects/demo-001',
+    source: 'Direct',
+    notes: 'Synthetic example: colored concrete mix and finish requirements are included for estimating practice.',
+  },
+  {
+    project_name: 'Sample Middle School Renovation',
+    address: null,
+    city: 'Sampleton',
+    gc_email: 'bids@example.com',
+    gc_contact_name: 'Alex Example / Jordan Sample',
+    gc_contact_phone: '512-555-0102',
+    submit_to: 'bids@example.com (or via demo portal)',
+    scope: 'Middle school renovation with selective demolition and sitework.',
+    trades: ['Renovation', 'Sitework'],
+    plans_link: 'https://example-planroom.test/projects/demo-002',
+    source: 'Procore',
+    notes: 'Synthetic contacts only. Plans are available through the example plan room.',
+  },
+  {
+    project_name: 'Commerce Lot 1R Sitework',
+    address: '200 Fixture Road',
+    city: null,
+    gc_email: 'estimating@example.com',
+    gc_contact_phone: '214-555-0103',
+    bid_due_date: null,
+    bid_due_time: null,
+    submit_to: 'estimating@example.com',
+    scope: 'Site preparation for a commercial pad; final civil details remain pending.',
+    trades: ['Sitework'],
+    plans_link: 'https://example-planroom.test/projects/demo-003',
+    source: 'Direct',
+    notes: 'Synthetic fixture with an intentionally missing due date for incomplete-invitation workflows.',
+  },
+  {
+    project_name: 'Fixture Family Restaurant Build-Out',
+    address: null,
+    city: 'Demo Ridge',
+    gc_email: null,
+    gc_contact_name: 'Taylor Fixture',
+    gc_contact_phone: null,
+    bid_due_date: '2026-05-19',
+    bid_due_time: '2:00 PM',
+    scope: 'Restaurant shell and site package.',
+    trades: ['Concrete', 'Sitework'],
+    plans_link: null,
+    source: 'Procore',
+    status: 'Expired',
+    notes: 'Synthetic expired opportunity retained to exercise deadline and archive views.',
+  },
+  {
+    project_name: 'Slate Office Park Site Package',
+    address: null,
+    city: null,
+    state: null,
+    gc_email: 'notifications@example.com',
+    bid_due_date: null,
+    bid_due_time: null,
+    scope: 'Office development earthwork and sitework package.',
+    trades: ['Sitework', 'Earthwork'],
+    plans_link: null,
+    source: 'Procore',
+    notes: 'Synthetic reminder fixture with intentionally incomplete location and schedule data.',
+  },
+  {
+    project_name: 'Example Public Safety Warehouse',
+    address: '320 Demonstration Avenue',
+    city: 'Fixture Falls',
+    gc_email: null,
+    bid_due_date: '2026-05-26',
+    bid_due_time: '2:00 PM CT',
+    submit_to: 'Demo procurement portal',
+    scope: 'A 9,000 SF conditioned metal warehouse on a 3.8-acre site under a unit-price contract.',
+    trades: ['Concrete', 'Structural Steel', 'Masonry', 'Earthwork', 'Utilities', 'MEP'],
+    plans_link: 'https://example-planroom.test/projects/demo-006',
+    source: 'PlanHub',
+    status: 'Reviewing',
+    notes: 'Synthetic public-works example with a $5,400,000 reference budget and 515-calendar-day schedule.',
+  },
+  {
+    project_name: 'The Demo Grove Retail Shell',
+    address: '400 Sample Street',
+    city: 'Sampleton',
+    scope: 'Small commercial shell and associated flatwork.',
+    trades: ['Concrete', 'Sitework'],
+    notes: 'Synthetic retail invitation for dashboard demonstrations.',
+  },
+  {
+    project_name: 'Parks Maintenance Storage Expansion',
+    address: '1701 Example Drive',
+    city: 'Example City',
+    bid_due_date: '2026-05-31',
+    bid_due_time: '8:00 AM',
+    scope: 'Municipal parks maintenance storage expansion.',
+    trades: ['Concrete', 'Earthwork', 'Sitework'],
+    notes: 'Synthetic primary bid package paired with demo bid 009.',
+  },
+  {
+    project_name: 'Parks Maintenance Storage Expansion - Alternate',
+    address: '1701 Example Drive',
+    city: 'Example City',
+    bid_due_date: '2026-06-01',
+    bid_due_time: '9:00 AM',
+    scope: 'Alternate public storage expansion package at the same synthetic site.',
+    trades: ['Concrete', 'Earthwork', 'Sitework'],
+    notes: 'Synthetic alternate package retained to exercise possible-duplicate review.',
+  },
+  {
+    project_name: 'Community Park Parking Lot Expansion',
+    address: '251 County Demo Road',
+    city: 'Fixture Falls',
+    bid_due_date: '2026-06-02',
+    bid_due_time: '9:00 AM',
+    scope: 'Parking expansion with concrete or asphalt paving, earthwork, and striping.',
+    trades: ['Concrete', 'Asphalt', 'Paving', 'Earthwork', 'Striping'],
+    notes: 'Synthetic high-relevance paving opportunity.',
+  },
+  {
+    project_name: 'Community Pavilion Construction and Renovation',
+    address: '15820 Sample Park Road',
+    city: 'Demo Ridge',
+    bid_due_date: '2026-06-02',
+    bid_due_time: '10:00 AM',
+    scope: 'Pavilion addition and renovation at a fictional community park.',
+    trades: ['Concrete', 'Masonry', 'Sitework'],
+    notes: 'Synthetic park facility example.',
+  },
+  {
+    project_name: 'Commercial Pad 3',
+    address: '4815 Fixture Vista Drive',
+    city: 'Sampleton',
+    bid_due_date: '2026-06-03',
+    bid_due_time: '8:00 AM',
+    scope: 'Commercial pad construction and site preparation.',
+    trades: ['Concrete', 'Earthwork', 'Sitework'],
+    notes: 'Synthetic commercial-site fixture.',
+  },
+  {
+    project_name: 'Example Thrift Retail Shell',
+    address: '1119 Demonstration Street',
+    city: 'Fixture Falls',
+    bid_due_date: '2026-06-08',
+    bid_due_time: '8:00 AM',
+    scope: 'Retail shell construction with utilities and site improvements.',
+    trades: ['Concrete', 'Earthwork', 'Sitework', 'Utilities'],
+    notes: 'Synthetic retail fixture.',
+  },
+  {
+    project_name: 'Covered Parking and Laydown Area',
+    address: '300 Example Industrial Avenue',
+    city: 'Example City',
+    bid_due_date: '2026-06-08',
+    bid_due_time: '9:00 AM',
+    scope: 'Covered parking structure and construction laydown area.',
+    trades: ['Concrete', 'Paving', 'Earthwork', 'Structural Steel'],
+    notes: 'Synthetic high-relevance concrete and paving opportunity.',
+  },
+  {
+    project_name: 'Early Learning Classroom Addition',
+    address: '608 Sample College Street',
+    city: 'Demo Ridge',
+    bid_due_date: '2026-06-08',
+    bid_due_time: '10:00 AM',
+    scope: 'Classroom additions at a fictional early learning center.',
+    trades: ['Concrete', 'Masonry', 'Sitework', 'Earthwork'],
+    notes: 'Synthetic education project.',
+  },
+  {
+    project_name: 'Demo Auto Parts Store',
+    address: '1485 Example Road',
+    city: 'Sampleton',
+    bid_due_date: '2026-05-27',
+    bid_due_time: '11:00 AM',
+    scope: 'Standalone auto parts retail store construction.',
+    trades: ['Concrete', 'Earthwork', 'Sitework', 'Utilities'],
+    notes: 'Synthetic retail construction fixture.',
+  },
+  {
+    project_name: 'Metal Building 115 Reconstruction',
+    address: '3600 Demonstration Boulevard',
+    city: 'Fixture Falls',
+    bid_due_date: '2026-05-28',
+    bid_due_time: '12:00 PM',
+    scope: 'Reconstruction of a pre-engineered metal storage building.',
+    trades: ['Concrete', 'Structural Steel', 'Earthwork', 'MEP'],
+    notes: 'Synthetic prevailing-wage example for compliance workflows.',
+  },
+  {
+    project_name: 'North Drive-Through Coffee Kiosk',
+    address: '12405 Sample Road',
+    city: 'Example City',
+    bid_due_date: '2026-06-02',
+    bid_due_time: '8:00 AM',
+    scope: 'Drive-through coffee kiosk and associated site utilities.',
+    trades: ['Concrete', 'Earthwork', 'Sitework', 'Utilities'],
+    notes: 'Synthetic kiosk opportunity paired with demo bid 019.',
+  },
+  {
+    project_name: 'South Drive-Through Coffee Kiosk',
+    address: '914 Fixture Street',
+    city: 'Demo Ridge',
+    bid_due_date: '2026-06-02',
+    bid_due_time: '8:00 AM',
+    scope: 'Drive-through coffee kiosk and associated site utilities.',
+    trades: ['Concrete', 'Earthwork', 'Sitework', 'Utilities'],
+    notes: 'Synthetic companion opportunity used for same-GC comparisons.',
+  },
+  {
+    project_name: 'Example High School Summer Modernization',
+    address: '13212 Sample Boulevard',
+    city: 'Sampleton',
+    bid_due_date: '2026-06-02',
+    bid_due_time: '10:00 AM',
+    scope: 'High school summer modernization package.',
+    trades: ['Concrete', 'Masonry', 'Sitework', 'Earthwork'],
+    notes: 'Synthetic primary package paired with demo bid 021.',
+  },
+  {
+    project_name: 'Example High School Modernization - Alternate',
+    address: '13212 Sample Boulevard',
+    city: 'Sampleton',
+    bid_due_date: '2026-06-02',
+    bid_due_time: '10:00 AM',
+    scope: 'Alternate listing for a fictional high school modernization.',
+    trades: ['Concrete', 'Masonry', 'Sitework', 'Earthwork'],
+    notes: 'Synthetic possible duplicate retained for review workflows.',
+  },
+  {
+    project_name: 'Demo Outpatient Clinic',
+    address: '9108 Fixture Lane, Building 3, Suite 302',
+    city: 'Fixture Falls',
+    bid_due_date: '2026-06-04',
+    bid_due_time: '10:00 AM',
+    scope: 'Commercial outpatient clinic construction.',
+    trades: ['Concrete', 'Sitework', 'MEP'],
+    notes: 'Synthetic medical-office example.',
+  },
+  {
+    project_name: 'Stagecoach Veterinary Hospital',
+    address: '4826 Example Stagecoach Road',
+    city: 'Demo Ridge',
+    bid_due_date: '2026-06-04',
+    bid_due_time: '10:00 AM',
+    scope: 'Veterinary hospital shell, utilities, and site package.',
+    trades: ['Concrete', 'Earthwork', 'Sitework', 'Utilities'],
+    notes: 'Synthetic veterinary project.',
+  },
+  {
+    project_name: 'Sample Smoothie Retail Store',
+    address: '1300 State Demo Highway',
+    city: 'Example City',
+    bid_due_date: '2026-06-05',
+    bid_due_time: '1:00 PM',
+    scope: 'Small retail store and sitework package.',
+    trades: ['Concrete', 'Earthwork', 'Sitework'],
+    notes: 'Synthetic quick-service retail fixture.',
+  },
+  {
+    project_name: 'Federal Exchange Renovation',
+    address: '5100 Fixture Road',
+    city: 'Sampleton',
+    bid_due_date: '2026-06-09',
+    bid_due_time: '8:00 AM',
+    scope: 'Renovation of a fictional federal retail exchange.',
+    trades: ['Concrete', 'Earthwork', 'Sitework', 'MEP'],
+    notes: 'Synthetic federal-project example with prevailing-wage and access requirements.',
+  },
+  {
+    project_name: 'Demo Roadway Reconstruction',
+    address: null,
+    city: 'Fixture Falls',
+    bid_due_date: '2026-06-08',
+    bid_due_time: '12:00 PM',
+    scope: 'Road reconstruction with base placement and Type D asphalt.',
+    trades: ['Earthwork', 'Asphalt', 'Paving', 'Grading'],
+    notes: 'Synthetic high-relevance civil opportunity funded through a sample grant program.',
+  },
+  {
+    project_name: 'East Connector Reconstruction and Water Line',
+    address: 'East Connector Road',
+    city: 'Demo Ridge',
+    bid_due_date: '2026-06-14',
+    bid_due_time: '10:00 AM',
+    scope: 'Roadway reconstruction and water-line improvements.',
+    trades: ['Earthwork', 'Paving', 'Utilities', 'Grading'],
+    notes: 'Synthetic high-relevance road and utility fixture.',
+  },
+  {
+    project_name: 'Bluff Road Improvements and Signalization',
+    address: 'Demo Highway 93',
+    city: 'Example City',
+    bid_due_date: '2026-06-15',
+    bid_due_time: '10:30 AM',
+    scope: 'Approximately 6,200 LF of two-lane roadway construction with traffic signalization.',
+    trades: ['Earthwork', 'Paving', 'Concrete', 'Grading', 'Utilities'],
+    notes: 'Synthetic large-road example with substantial earthwork and paving quantities.',
+  },
+  {
+    project_name: 'Community Park Renovation',
+    address: null,
+    city: 'Fixture Falls',
+    bid_due_date: '2026-06-23',
+    bid_due_time: '11:00 AM',
+    scope: 'Renovation of a fictional park and playground.',
+    trades: ['Concrete', 'Earthwork', 'Sitework'],
+    notes: 'Synthetic park fixture with flatwork, grading, and utility scope.',
+  },
 ];
+
+const BIDS: SeedBid[] = FIXTURES.map((fixture, index) => {
+  const sequence = index + 1;
+  const suffix = String(sequence).padStart(3, '0');
+  const gcName = SYNTHETIC_GCS[index % SYNTHETIC_GCS.length];
+
+  return {
+    id: `BID-2026-${suffix}`,
+    thread_id: `demo-thread-${suffix}`,
+    email_received: '2026-05-23',
+    address: `${100 + sequence} Example Way`,
+    city: 'Example City',
+    state: 'TX',
+    gc_name: gcName,
+    gc_email: null,
+    gc_contact_name: null,
+    gc_contact_phone: null,
+    bid_due_date: `2026-06-${String(sequence + 2).padStart(2, '0')}`,
+    bid_due_time: '10:00 AM',
+    submit_to: null,
+    plans_link: null,
+    source: 'PlanHub',
+    status: 'New',
+    our_bid_amount: null,
+    awarded_amount: null,
+    notes: 'Synthetic fixture for demos and automated testing.',
+    ...fixture,
+  };
+});
 
 export async function POST(req: NextRequest) {
   let secret: unknown = null;
