@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test tests/tenant-isolation.test.mjs"
+    "test": "node --test tests/tenant-isolation.test.mjs tests/cost-observations.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.99.0",

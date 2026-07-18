@@ -21,6 +21,11 @@ Coverage includes:
 - initplan-safe profile policies and explicit service-role-only markers; and
 - all 17 foreign-key indexes requested by the Supabase advisor.
 
+The M2 foundation tests additionally cover deterministic trade/unit/item
+normalization, exact workspace/unit filtering, source-kind separation,
+recency-weighted robust suggestions, explicit insufficient-evidence responses,
+and the service-write-only `cost_observations` schema contract.
+
 These fast tests protect the repository contract and are safe for CI. They do
 not connect to or mutate the live Supabase project. A disposable local Supabase
 integration test can be added later when the project adopts the Supabase CLI;
