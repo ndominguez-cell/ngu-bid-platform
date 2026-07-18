@@ -43,6 +43,45 @@ test('cross-workspace reads are denied for core bid records by the final RLS con
   assert.doesNotMatch(hardeningSql, /drop function[^;]*is_workspace_member/i);
 });
 
+test('final cleanup removes every known permissive legacy policy', async () => {
+  const cleanupSql = compactSql(
+    await source('supabase/migrations/20260718100000_remove_legacy_permissive_policies.sql'),
+  );
+  const businessTables = [
+    'bids',
+    'bid_activity',
+    'companies',
+    'contacts',
+    'documents',
+    'estimates',
+    'proposals',
+    'conversations',
+  ];
+
+  for (const table of businessTables) {
+    assert.match(
+      cleanupSql,
+      new RegExp(`drop policy if exists "auth_full" on public\\.${table}`),
+      `auth_full must be removed from ${table}`,
+    );
+    assert.match(
+      cleanupSql,
+      new RegExp(`drop policy if exists "Authenticated full access" on public\\.${table}`),
+      `legacy full-access policy must be removed from ${table}`,
+    );
+  }
+
+  assert.match(cleanupSql, /drop policy if exists "read_all" on public\.profiles/);
+  assert.match(cleanupSql, /drop policy if exists "Users can view all profiles" on public\.profiles/);
+
+  for (const policy of ['docs_upload', 'docs_read', 'docs_delete']) {
+    assert.match(
+      cleanupSql,
+      new RegExp(`drop policy if exists "${policy}" on storage\\.objects`),
+    );
+  }
+});
+
 test('invite creation is pinned to the authenticated caller workspace', async () => {
   const callerWorkspace = 'workspace-a';
   const maliciousBody = {

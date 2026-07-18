@@ -1,3 +1,6 @@
+-- LEGACY REFERENCE ONLY — DO NOT EXECUTE.
+-- This file contains historical permissive RLS examples. Current schema
+-- changes belong in supabase/migrations/. See supabase/README.md.
 -- ============================================================
 -- NGU Bid Platform — Supabase Database Schema
 -- Run this in Supabase > SQL Editor > New Query

@@ -13,6 +13,13 @@ and bid outcomes.
 
 ## M1 closeout status (2026-07-17)
 
+> **2026-07-18 security recheck:** the advisor migration was manually applied
+> during a batch SQL run, but that same run re-created legacy permissive RLS
+> policies. M1 is not release-ready until
+> `supabase/verification/20260718_m1_rls_audit.sql` returns zero rows. The local
+> branch now includes an idempotent final cleanup migration and a regression
+> test for every known legacy policy name.
+
 `main` remains at `096340f`. M1 review work is intentionally split across
 local branches and has not been merged by this closeout:
 
@@ -26,8 +33,9 @@ local branches and has not been merged by this closeout:
   and database are temporarily out of sync.
 - `test/tenant-isolation` carries the invite prerequisite, dependency-free
   tenant-isolation tests, defensive invite role handling, and a new
-  file-only advisor-hardening migration. Do not apply the new migration until
-  partner review.
+  advisor hardening and the incident follow-up cleanup migration. Do not run
+  another database file until partner review and migration-history
+  reconciliation.
 
 The exact branch review and migration commands are recorded in
 `nickdom0923AgentNotes/26_M1_CLOSEOUT_2026-07-17.md`.
@@ -71,10 +79,10 @@ See `tests/README.md` for its scope and limitations.
 Schema changes live in `supabase/migrations/` and are applied in timestamp
 order. Migrations are reviewed as code before anyone runs them against a
 shared project. In particular,
-`20260717120000_advisor_hardening.sql` is a review artifact only: it moves RLS
-helpers out of the exposed API schema, optimizes profile policies, documents
-service-role-only tables, tightens invitation roles, and adds 17 foreign-key
-indexes.
+`20260717120000_advisor_hardening.sql` was applied manually on 2026-07-17. The
+follow-up `20260718100000_remove_legacy_permissive_policies.sql` is drop-only and
+idempotent; it removes policy names that can bypass workspace RLS. Read
+`supabase/README.md` before any database work.
 
 ## Security model
 

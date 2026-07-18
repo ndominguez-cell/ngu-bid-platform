@@ -3,6 +3,17 @@
 Plain-language project status, newest first. “Pending” means the work is not on
 `main` and is not part of the deployed application.
 
+## 2026-07-18 — M1 security recheck
+
+- A manual batch SQL run applied advisor hardening but also re-created old
+  permissive RLS policies from the historical bootstrap migration.
+- Added an idempotent final cleanup migration covering every known legacy
+  permissive policy name, plus a read-only zero-row audit query.
+- Added warnings that migration folders, setup bundles, and the legacy schema
+  reference must not be run against a shared/live database.
+- Tenant/security tests now pass 7/7. Live M1 clearance still requires the
+  audit query to return zero rows.
+
 ## Pending partner review
 
 ### 2026-07-17 — M1 security closeout

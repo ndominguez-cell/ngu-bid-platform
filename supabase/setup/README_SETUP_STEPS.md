@@ -1,5 +1,10 @@
 # Standing up your own Supabase copy — step by step
 
+> **Disposable sandbox only.** These setup bundles are not an upgrade path and
+> must never be run against the shared/live project. For current application
+> development, prefer the ordered files in `supabase/migrations/` and read
+> `supabase/README.md` first.
+
 Goal: get the full bid-platform database running in **your own** Supabase
 project so you have a safe sandbox. Nothing here touches your partner's
 live NGU database or his Vercel deployment.
@@ -26,7 +31,8 @@ seed (`02`) is optional.
    tables, not rows. (Check **Table Editor** in the sidebar; you'll see
    `bids`, `companies`, `workspaces`, etc.)
 
-If you ever re-run it, that's fine — it's written to be safe to run again.
+Do not re-run this bundle on an existing/shared database. It is retained for
+historical sandbox setup and does not replace migration-history tracking.
 
 ## Step 2 — Point a LOCAL copy of the app at your project (the safe way)
 

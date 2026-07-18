@@ -14,6 +14,7 @@ the migration and API boundaries that enforce tenancy.
 Coverage includes:
 
 - workspace-member RLS for `bids`, `estimates`, `proposals`, and `documents`;
+- removal of every known legacy policy that could bypass workspace RLS;
 - invite creation pinned to the authenticated caller's workspace;
 - invite acceptance ignoring request-supplied roles and rejecting `owner`;
 - private-schema placement and policy usability of security-definer helpers;
