@@ -351,3 +351,29 @@ M3 gets its own branch only after M2 data/accuracy gates pass.
 4. Decide whether supplier quotes may be stored and their retention policy.
 5. Set the minimum margin floor for any future pricing optimizer.
 6. Approve the consent language before any M3 cross-tenant implementation.
+
+## 2026-07-22 implementation receipt
+
+This pass moved the remaining code-safe M1 work onto
+`codex/m2-estimating-brain` and implemented a bounded M2 feedback loop:
+
+- the reviewed synthetic seed-data scrub is carried forward;
+- a new append-only migration pins the two remaining mutable function search
+  paths, with a read-only readiness query and partner-controlled rollout guide;
+- writer roles can publish only a persisted `Approved` estimate as private
+  `approved_estimate` evidence;
+- invalid or unsupported lines block the entire publication (`V > 0`), while
+  successful replays upsert stable line references and remove stale tail rows;
+- `npm run eval:m2` emits a deterministic receipt and exits non-zero on a
+  violated expectation, accuracy ceiling, or baseline regression.
+
+Verification at implementation time: 19/19 offline tests passed, strict
+TypeScript passed, the production Next build passed, and the synthetic loop
+smoke set returned `V = 0`. Synthetic metrics validate plumbing only; the next
+M2 accuracy claim requires de-identified partner-approved labeled outcomes.
+
+Still partner-controlled: migration-ledger reconciliation, live SQL execution,
+the final RLS/readiness queries, leaked-password protection, and branch landing.
+After those gates, the next product slice is M2.3: a workspace-scoped suggestion
+API and estimate-editor sidecar that shows range, comparable count, freshness,
+source mix, and explicit fallback reasons.

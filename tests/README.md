@@ -24,7 +24,19 @@ Coverage includes:
 The M2 foundation tests additionally cover deterministic trade/unit/item
 normalization, exact workspace/unit filtering, source-kind separation,
 recency-weighted robust suggestions, explicit insufficient-evidence responses,
-and the service-write-only `cost_observations` schema contract.
+the Approved-estimate publication gate, and the service-write-only
+`cost_observations` schema contract.
+
+Emit the deterministic M2 evaluation receipt with:
+
+```powershell
+npm run eval:m2
+```
+
+The checked-in evaluation cases are synthetic. They prove that the loop has a
+measurable stop condition (`V = 0`) and detects regressions; they do not claim
+production bid accuracy. Replace or supplement them with de-identified,
+partner-approved labeled outcomes before making accuracy claims.
 
 These fast tests protect the repository contract and are safe for CI. They do
 not connect to or mutate the live Supabase project. A disposable local Supabase

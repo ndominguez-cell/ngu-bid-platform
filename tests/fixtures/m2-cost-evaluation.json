@@ -1,0 +1,73 @@
+{
+  "name": "synthetic-m2-loop-smoke-v1",
+  "description": "Synthetic cases verify evaluation plumbing and stop conditions; they are not evidence of production estimating accuracy.",
+  "cases": [
+    {
+      "id": "concrete-sidewalk-reviewed-evidence",
+      "query": {
+        "workspaceId": "workspace-a",
+        "trade": "Concrete",
+        "itemKey": "4 inch sidewalk",
+        "unit": "SF",
+        "asOf": "2026-07-22T12:00:00.000Z"
+      },
+      "observations": [
+        { "workspaceId": "workspace-a", "observationKind": "actual_cost", "trade": "Concrete", "itemKey": "4-inch-sidewalk", "unit": "SF", "unitCost": 9.5, "observedOn": "2026-05-01", "confidence": 1 },
+        { "workspaceId": "workspace-a", "observationKind": "approved_estimate", "trade": "Concrete", "itemKey": "4-inch-sidewalk", "unit": "SF", "unitCost": 10, "observedOn": "2026-06-01", "confidence": 0.8 },
+        { "workspaceId": "workspace-a", "observationKind": "supplier_quote", "trade": "Concrete", "itemKey": "4-inch-sidewalk", "unit": "SF", "unitCost": 10.5, "observedOn": "2026-07-15", "confidence": 0.9 }
+      ],
+      "actualUnitCost": 10.25,
+      "baselineUnitCost": 13,
+      "maxAbsolutePercentageError": 0.1
+    },
+    {
+      "id": "earthwork-grading-reviewed-evidence",
+      "query": {
+        "workspaceId": "workspace-a",
+        "trade": "grading",
+        "itemKey": "mass grading",
+        "unit": "CY",
+        "asOf": "2026-07-22T12:00:00.000Z"
+      },
+      "observations": [
+        { "workspaceId": "workspace-a", "observationKind": "actual_cost", "trade": "Earthwork", "itemKey": "mass-grading", "unit": "CY", "unitCost": 5, "observedOn": "2026-03-01", "confidence": 0.9 },
+        { "workspaceId": "workspace-a", "observationKind": "actual_cost", "trade": "Earthwork", "itemKey": "mass-grading", "unit": "CY", "unitCost": 6, "observedOn": "2026-06-15", "confidence": 1 },
+        { "workspaceId": "workspace-a", "observationKind": "approved_estimate", "trade": "Earthwork", "itemKey": "mass-grading", "unit": "CY", "unitCost": 6.5, "observedOn": "2026-07-01", "confidence": 0.8 }
+      ],
+      "actualUnitCost": 6.1,
+      "baselineUnitCost": 8.5,
+      "maxAbsolutePercentageError": 0.1
+    },
+    {
+      "id": "public-data-is-not-private-evidence",
+      "query": {
+        "workspaceId": "workspace-a",
+        "trade": "Concrete",
+        "itemKey": "curb and gutter",
+        "unit": "LF",
+        "asOf": "2026-07-22T12:00:00.000Z"
+      },
+      "observations": [
+        { "workspaceId": "workspace-a", "observationKind": "public_bid_price", "trade": "Concrete", "itemKey": "curb-and-gutter", "unit": "LF", "unitCost": 20, "observedOn": "2026-06-01", "confidence": 0.8 },
+        { "workspaceId": "workspace-a", "observationKind": "public_bid_price", "trade": "Concrete", "itemKey": "curb-and-gutter", "unit": "LF", "unitCost": 22, "observedOn": "2026-06-02", "confidence": 0.8 },
+        { "workspaceId": "workspace-a", "observationKind": "public_bid_price", "trade": "Concrete", "itemKey": "curb-and-gutter", "unit": "LF", "unitCost": 24, "observedOn": "2026-06-03", "confidence": 0.8 }
+      ],
+      "expectedStatus": "insufficient_evidence"
+    },
+    {
+      "id": "minimum-three-comparables",
+      "query": {
+        "workspaceId": "workspace-a",
+        "trade": "Drainage",
+        "itemKey": "18 inch rcp",
+        "unit": "LF",
+        "asOf": "2026-07-22T12:00:00.000Z"
+      },
+      "observations": [
+        { "workspaceId": "workspace-a", "observationKind": "actual_cost", "trade": "Drainage", "itemKey": "18-inch-rcp", "unit": "LF", "unitCost": 70, "observedOn": "2026-06-01", "confidence": 1 },
+        { "workspaceId": "workspace-a", "observationKind": "actual_cost", "trade": "Drainage", "itemKey": "18-inch-rcp", "unit": "LF", "unitCost": 72, "observedOn": "2026-06-15", "confidence": 1 }
+      ],
+      "expectedStatus": "insufficient_evidence"
+    }
+  ]
+}

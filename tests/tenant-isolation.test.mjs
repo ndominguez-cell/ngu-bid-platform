@@ -208,3 +208,14 @@ test('all 17 advisor-reported foreign keys have covering indexes', async () => {
     );
   }
 });
+
+test('final M1 function hardening pins both advisor-reported search paths', async () => {
+  const sql = compactSql(
+    await source('supabase/migrations/20260722120000_function_search_path_hardening.sql'),
+  );
+
+  assert.match(sql, /to_regprocedure\('public\.handle_new_user\(\)'\)/);
+  assert.match(sql, /to_regprocedure\('public\.update_updated_at\(\)'\)/);
+  assert.match(sql, /alter function public\.handle_new_user\(\) set search_path = ''/);
+  assert.match(sql, /alter function public\.update_updated_at\(\) set search_path = ''/);
+});

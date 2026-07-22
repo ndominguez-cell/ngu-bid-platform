@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  buildApprovedEstimateObservations,
   normalizeItemKey,
   normalizeTrade,
   normalizeUnit,
@@ -24,6 +25,26 @@ function observation(overrides = {}) {
     unitCost: 10,
     observedOn: '2026-07-01',
     confidence: 1,
+    ...overrides,
+  };
+}
+
+function approvedEstimateInput(overrides = {}) {
+  return {
+    workspaceId: 'workspace-a',
+    estimateId: '11111111-1111-4111-8111-111111111111',
+    bidId: 'bid-a',
+    observedOn: '2026-07-22T10:30:00.000Z',
+    createdBy: '22222222-2222-4222-8222-222222222222',
+    lineItems: [
+      {
+        trade: 'grading',
+        description: 'Mass grading',
+        qty: 1250,
+        unit: 'cu yd',
+        unit_price: 6.25,
+      },
+    ],
     ...overrides,
   };
 }
@@ -124,6 +145,67 @@ test('public bid prices require explicit opt-in and remain labeled', () => {
   assert.equal(marketResult.status, 'suggestion');
   assert.equal(marketResult.suggestedUnitCost, 11);
   assert.deepEqual(marketResult.observationKinds, { public_bid_price: 3 });
+});
+
+test('approved estimate publication produces normalized, replay-safe rows', () => {
+  const first = buildApprovedEstimateObservations(approvedEstimateInput());
+  const replay = buildApprovedEstimateObservations(approvedEstimateInput());
+
+  assert.equal(first.status, 'ready');
+  assert.equal(first.V, 0);
+  assert.deepEqual(first, replay);
+  assert.deepEqual(first.rows[0], {
+    workspace_id: 'workspace-a',
+    observation_kind: 'approved_estimate',
+    source_name: 'ngu_estimate',
+    source_ref: '11111111-1111-4111-8111-111111111111',
+    source_line_ref: 'line-1',
+    bid_id: 'bid-a',
+    estimate_id: '11111111-1111-4111-8111-111111111111',
+    trade: 'Earthwork',
+    item_key: 'mass-grading',
+    description: 'Mass grading',
+    unit: 'CY',
+    quantity: 1250,
+    unit_cost: 6.25,
+    observed_on: '2026-07-22',
+    confidence: 0.65,
+    provenance: {
+      origin: 'approved_estimate',
+      line_index: 0,
+      review_gate: 'estimate_status_approved',
+    },
+    created_by: '22222222-2222-4222-8222-222222222222',
+  });
+});
+
+test('one invalid estimate line blocks the entire evidence set', () => {
+  const result = buildApprovedEstimateObservations(approvedEstimateInput({
+    lineItems: [
+      { trade: 'Concrete', description: 'Sidewalk', qty: 100, unit: 'SF', unit_price: 10 },
+      { trade: 'Other', description: '', qty: 0, unit: 'mystery', unit_price: 0 },
+    ],
+  }));
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.V, 5);
+  assert.equal(result.lineCount, 2);
+  assert.deepEqual(result.rows, []);
+});
+
+test('approved-estimate evidence route keeps the human and workspace gates', async () => {
+  const route = await readFile(
+    path.join(ROOT, 'app/api/estimates/[id]/observations/route.ts'),
+    'utf8',
+  );
+
+  assert.match(route, /requireUser\(\)/);
+  assert.match(route, /forbidNonWriter\(auth\.role\)/);
+  assert.match(route, /\.eq\('workspace_id', auth\.workspaceId\)/);
+  assert.match(route, /estimate\.status !== 'Approved'/);
+  assert.match(route, /onConflict: 'workspace_id,observation_kind,source_name,source_ref,source_line_ref'/);
+  assert.match(route, /\.in\('source_line_ref', staleRefs\)/);
+  assert.match(route, /V: 0/);
 });
 
 test('cost-observation schema is workspace-private and service-write-only', async () => {

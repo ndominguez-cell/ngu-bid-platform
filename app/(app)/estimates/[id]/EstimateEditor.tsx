@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, Save, Loader2, ChevronDown, Sparkles, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Save, Loader2, ChevronDown, Sparkles, Database } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 type EstimateStatus = 'Draft' | 'In Review' | 'Approved' | 'Submitted' | 'Archived';
@@ -29,6 +29,12 @@ interface EstimateEditorProps {
   defaultMargin?: number;
 }
 
+interface EvidenceReceipt {
+  V: number;
+  published: number;
+  removedStale: number;
+}
+
 const STATUSES: EstimateStatus[] = ['Draft', 'In Review', 'Approved', 'Submitted', 'Archived'];
 const TRADES = ['Concrete', 'Earthwork', 'Asphalt/Paving', 'Drainage', 'Utilities', 'Masonry', 'Structural Steel', 'Striping', 'Sitework', 'Other'];
 
@@ -51,8 +57,11 @@ export default function EstimateEditor({
   const [notes, setNotes] = useState(initialNotes ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [error, setError] = useState('');
   const [reEvalLoading, setReEvalLoading] = useState(false);
+  const [publishingEvidence, setPublishingEvidence] = useState(false);
+  const [evidenceReceipt, setEvidenceReceipt] = useState<EvidenceReceipt | null>(null);
 
   const subtotal = lineItems.reduce((s, li) => s + (li.total || 0), 0);
   const markupAmount = Math.round(subtotal * markup / 100);
@@ -67,6 +76,12 @@ export default function EstimateEditor({
   }, {});
   const tradeEntries = Object.entries(tradeTotals).sort((a, b) => b[1] - a[1]);
 
+  function markDirty() {
+    setSaved(false);
+    setHasUnsavedChanges(true);
+    setEvidenceReceipt(null);
+  }
+
   function updateItem(index: number, field: keyof LineItem, value: string | number) {
     setLineItems(prev => {
       const updated = [...prev];
@@ -77,17 +92,17 @@ export default function EstimateEditor({
       updated[index] = item;
       return updated;
     });
-    setSaved(false);
+    markDirty();
   }
 
   function addRow() {
     setLineItems(prev => [...prev, { trade: 'Concrete', description: '', qty: 0, unit: 'SF', unit_price: 0, total: 0 }]);
-    setSaved(false);
+    markDirty();
   }
 
   function removeRow(index: number) {
     setLineItems(prev => prev.filter((_, i) => i !== index));
-    setSaved(false);
+    markDirty();
   }
 
   async function handleSave() {
@@ -102,11 +117,29 @@ export default function EstimateEditor({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
       setSaved(true);
+      setHasUnsavedChanges(false);
+      setEvidenceReceipt(null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePublishEvidence() {
+    setPublishingEvidence(true);
+    setError('');
+    setEvidenceReceipt(null);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/observations`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Evidence publication failed');
+      setEvidenceReceipt(data.receipt);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Evidence publication failed');
+    } finally {
+      setPublishingEvidence(false);
     }
   }
 
@@ -118,6 +151,7 @@ export default function EstimateEditor({
       const res = await fetch(`/api/estimates/${estimateId}/reanalyze`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Re-evaluation failed');
+      setEvidenceReceipt(null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Re-evaluation failed');
@@ -135,7 +169,7 @@ export default function EstimateEditor({
           <div className="relative">
             <select
               value={status}
-              onChange={e => { setStatus(e.target.value as EstimateStatus); setSaved(false); }}
+              onChange={e => { setStatus(e.target.value as EstimateStatus); markDirty(); }}
               className="appearance-none text-[12px] font-semibold rounded px-2.5 py-1 pr-6 cursor-pointer outline-none border-0"
               style={{ background: 'var(--surface-2)', color: 'var(--text)' }}
             >
@@ -152,7 +186,7 @@ export default function EstimateEditor({
               type="number"
               min={0} max={100} step={0.5}
               value={markup}
-              onChange={e => { setMarkup(Number(e.target.value)); setSaved(false); }}
+              onChange={e => { setMarkup(Number(e.target.value)); markDirty(); }}
               className="w-12 text-[13px] font-semibold text-center outline-none px-2 py-1"
               style={{ background: 'var(--surface)', color: 'var(--text)' }}
             />
@@ -167,7 +201,7 @@ export default function EstimateEditor({
               type="number"
               min={0} max={100} step={0.5}
               value={margin}
-              onChange={e => { setMargin(Number(e.target.value)); setSaved(false); }}
+              onChange={e => { setMargin(Number(e.target.value)); markDirty(); }}
               className="w-12 text-[13px] font-semibold text-center outline-none px-2 py-1"
               style={{ background: 'var(--surface)', color: 'var(--text)' }}
             />
@@ -176,6 +210,17 @@ export default function EstimateEditor({
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          {status === 'Approved' && (
+            <button
+              onClick={handlePublishEvidence}
+              disabled={publishingEvidence || hasUnsavedChanges}
+              className="btn btn-ghost btn-sm flex items-center gap-1.5"
+              title={hasUnsavedChanges ? 'Save this Approved estimate before publishing evidence' : 'Publish reviewed line-item costs as private workspace evidence'}
+            >
+              {publishingEvidence ? <Loader2 size={13} className="animate-spin" /> : <Database size={13} />}
+              {publishingEvidence ? 'Publishing…' : 'Publish Cost Evidence'}
+            </button>
+          )}
           <button
             onClick={handleReEvaluate}
             disabled={reEvalLoading || !bidId}
@@ -190,6 +235,11 @@ export default function EstimateEditor({
             <div className="text-[17px] font-bold" style={{ color: 'var(--navy)' }}>{formatCurrency(grandTotal)}</div>
           </div>
           {error && <span className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</span>}
+          {evidenceReceipt && !error && (
+            <span className="text-[12px] font-semibold" style={{ color: 'var(--ok)' }}>
+              Evidence: {evidenceReceipt.published} lines · V={evidenceReceipt.V}
+            </span>
+          )}
           {saved && !error && <span className="text-[12px] font-semibold" style={{ color: 'var(--ok)' }}>Saved</span>}
           <button onClick={handleSave} disabled={saving} className="btn btn-primary btn-sm flex items-center gap-1.5">
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
@@ -414,7 +464,7 @@ export default function EstimateEditor({
         <h2 className="card-title mb-2">Notes / Assumptions</h2>
         <textarea
           value={notes}
-          onChange={e => { setNotes(e.target.value); setSaved(false); }}
+          onChange={e => { setNotes(e.target.value); markDirty(); }}
           rows={3}
           placeholder="Key assumptions, exclusions, qualifications…"
           className="w-full text-[13px] rounded border px-3 py-2 outline-none resize-none"
